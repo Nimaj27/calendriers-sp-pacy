@@ -554,7 +554,7 @@ const fsListenDoc  = (col, id, cb) =>
   onSnapshot(doc(db, col, id), snap => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null));
 
 // ── Auth Google ───────────────────────────────────────────────
-const loginGoogle      = () => signInWithRedirect(auth, googleProvider);
+const loginGoogle      = () => signInWithPopup(auth, googleProvider);
 const getLoginRedirect = () => Promise.resolve(null);
 const logoutGoogle = () => signOut(auth);
 const onAuth       = (cb) => onAuthStateChanged(auth, cb);
