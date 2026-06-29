@@ -1,0 +1,12 @@
+{
+  "name": "Tournée Calendriers — SP Pacy",
+  "short_name": "Calendriers SP",
+  "description": "Gestion de la tournée de vente de calendriers — Amicale SP Pacy-sur-Eure",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2D3142",
+  "theme_color": "#CC1D1D",
+  "orientation": "portrait-primary",
+  "lang": "fr",
+  "icons": []
+}
