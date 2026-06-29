@@ -583,7 +583,6 @@ async function loginPin(pin) {
 
 
 
-
 // ============================================================
 // SECTEURS
 // ============================================================
@@ -1107,21 +1106,11 @@ getLoginRedirect().then(async (result) => {
 });
 
 onAuth(async (user) => {
-  if (user) {
-    const admin = await isAdmin(user.email);
-    if (admin) {
-      APP.role = "admin";
-      APP.user = user;
-      const hash = window.location.hash;
-      naviguer(ROUTES[hash] ? hash : "#dashboard");
-      return;
-    }
-    // Email connecté mais pas admin → déconnexion silencieuse
-    await logoutGoogle();
-  }
-  // Pas d'équipier Firebase Auth — vérifier session PIN
+  console.log("onAuth fired, user:", user?.email || "null");
+
+  // Vérifier session PIN équipier en premier (indépendant de Google Auth)
   const sessionEquipe = sessionStorage.getItem("equipe");
-  if (sessionEquipe) {
+  if (sessionEquipe && !user) {
     const eq = JSON.parse(sessionEquipe);
     APP.role = "equipier";
     APP.user = eq;
@@ -1130,6 +1119,30 @@ onAuth(async (user) => {
     naviguer("#terrain");
     return;
   }
+
+  if (user) {
+    console.log("Checking admin for:", user.email);
+    try {
+      const admin = await isAdmin(user.email);
+      console.log("isAdmin result:", admin);
+      if (admin) {
+        APP.role = "admin";
+        APP.user = user;
+        const hash = window.location.hash;
+        naviguer(ROUTES[hash] && hash !== "#login" ? hash : "#dashboard");
+        return;
+      }
+      // Pas admin → toast + déconnexion
+      toast("Accès refusé. Vérifie que ton email est dans la collection admins Firestore.", "error");
+      console.error("Email non admin:", user.email);
+      await logoutGoogle();
+    } catch(e) {
+      console.error("Erreur isAdmin:", e);
+      toast("Erreur de vérification admin : " + e.message, "error");
+      await logoutGoogle();
+    }
+  }
+
   naviguer("#login");
 });
 
