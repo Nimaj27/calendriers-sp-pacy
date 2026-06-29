@@ -14,10 +14,10 @@
   <!-- Favicon / Apple icons -->
 
   <!-- PWA Manifest -->
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="./manifest.json">
 
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
 
@@ -33,13 +33,13 @@
     Firebase SDK est importé depuis gstatic via ESM.
     app.js est le point d'entrée unique.
   -->
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="./js/app.js"></script>
 
   <!-- ── Service Worker (PWA) ── -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
+        navigator.serviceWorker.register('./sw.js')
           .then(reg => console.log('SW enregistré :', reg.scope))
           .catch(err => console.warn('SW non enregistré :', err));
       });
