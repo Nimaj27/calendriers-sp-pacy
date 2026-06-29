@@ -481,9 +481,7 @@ body {
   <div id="toasts" aria-live="polite"></div>
 
   <script type="module">
-// ============================================================
-// FIREBASE
-// ============================================================
+// ── FIREBASE ─────────────────────────────────────────────────
 // ============================================================
 // firebase.js — Configuration et initialisation Firebase
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -519,8 +517,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import {
   getAuth,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged
@@ -582,10 +579,7 @@ async function loginPin(pin) {
 }
 
 
-
-// ============================================================
-// SECTEURS
-// ============================================================
+// ── SECTEURS ─────────────────────────────────────────────────
 // ============================================================
 // secteurs.js — Gestion des secteurs géographiques
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -733,10 +727,7 @@ async function statsGlobales() {
   };
 }
 
-
-// ============================================================
-// TOURNEE
-// ============================================================
+// ── TOURNEE ──────────────────────────────────────────────────
 // ============================================================
 // tournee.js — Logique métier tournée calendriers
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -1015,10 +1006,7 @@ function telechargerCSV(csv, filename = "bilan-tournee-calendriers.csv") {
   URL.revokeObjectURL(url);
 }
 
-
-// ============================================================
-// APP
-// ============================================================
+// ── APP ──────────────────────────────────────────────────────
 // ============================================================
 // app.js — Routing, authentification, navigation principale
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -1207,16 +1195,29 @@ function bindLoginEvents() {
     });
   });
 
-  // Google — signInWithRedirect (pas de popup, évite les blocages COOP)
+  // Google — signInWithPopup
   const btnGoogle = document.getElementById("btn-google");
   if (btnGoogle) {
     btnGoogle.addEventListener("click", async () => {
       setLoading(btnGoogle, true);
       try {
-        await loginGoogle(); // déclenche la redirection vers Google
-        // La page va se recharger — onAuth + getLoginRedirect gèrent le retour
+        const result = await loginGoogle();
+        if (result?.user) {
+          const admin = await isAdmin(result.user.email);
+          if (admin) {
+            APP.role = "admin";
+            APP.user = result.user;
+            naviguer("#dashboard");
+          } else {
+            toast("Accès refusé : " + result.user.email + " n\'est pas administrateur.", "error");
+            await logoutGoogle();
+            setLoading(btnGoogle, false);
+          }
+        }
       } catch (e) {
-        toast("Erreur de connexion : " + e.message, "error");
+        if (e.code !== "auth/popup-closed-by-user") {
+          toast("Erreur de connexion : " + e.message, "error");
+        }
         setLoading(btnGoogle, false);
       }
     });
@@ -2034,8 +2035,8 @@ window.dispatchEvent(new HashChangeEvent("hashchange"));
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('SW OK:', reg.scope))
-          .catch(err => console.warn('SW erreur:', err));
+          .then(r => console.log('SW OK:', r.scope))
+          .catch(e => console.warn('SW:', e));
       });
     }
   </script>
