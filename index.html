@@ -1647,7 +1647,7 @@ async function renderPassages() {
   if (APP.role !== "admin") { naviguer("#login"); return; }
   stopUnsubs();
 
-  const secteurs = await (await import("./secteurs.js")).lireSecteurs();
+  const secteurs = await lireSecteurs();
 
   document.getElementById("main").innerHTML = layoutAdmin("#passages", `
     <div class="page-header"><h1>Passages</h1></div>
@@ -1667,7 +1667,7 @@ async function renderPassages() {
     if (secteurId) {
       passages = await passagesDuSecteur(secteurId);
     } else {
-            passages = await fsGetAll(COLLECTIONS.PASSAGES);
+      passages = await fsGetAll(COLLECTIONS.PASSAGES);
       passages.sort((a,b) => (b.datePassage || "").localeCompare(a.datePassage || ""));
     }
     renderPassagesList(passages, secteurs);
@@ -1723,7 +1723,7 @@ async function renderRelances() {
   bindLogout();
 
   const passages  = await foyersARelancer();
-  const secteurs  = await (await import("./secteurs.js")).lireSecteurs();
+  const secteurs  = await lireSecteurs();
   const secteurMap = Object.fromEntries(secteurs.map(s => [s.id, s]));
 
   const list = document.getElementById("relances-list");
@@ -1795,7 +1795,7 @@ async function renderConfig() {
         admins
       });
       // Mettre à jour la collection admins
-            for (const email of admins) {
+      for (const email of admins) {
         await fsSet("admins", email, { email, grantedAt: new Date().toISOString() });
       }
       toast("Configuration sauvegardée ✅", "success");
