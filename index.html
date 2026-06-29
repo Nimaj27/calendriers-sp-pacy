@@ -4,14 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#CC1D1D">
-  <meta name="description" content="Gestion de la tournée de vente de calendriers — Amicale SP Pacy-sur-Eure, SDIS 27">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Calendriers SP">
   <title>Tournée Calendriers — SP Pacy</title>
   <link rel="manifest" href="./manifest.json">
-  <style>
-/* ============================================================
+  <style>/* ============================================================
    style.css — Design mobile-first Amicale SP Pacy-sur-Eure
    Palette : rouge pompier #CC1D1D, gris ardoise #2D3142,
              blanc #FFFFFF, orange alerte #F97316, vert succès #16A34A
@@ -473,15 +471,12 @@ body {
 @media (min-width: 768px) {
   .terrain-layout { max-width: 600px; margin: 0 auto; }
 }
-
-  </style>
+</style>
 </head>
 <body>
   <div id="main"></div>
   <div id="toasts" aria-live="polite"></div>
-
   <script type="module">
-// ── FIREBASE ─────────────────────────────────────────────────
 // ============================================================
 // firebase.js — Configuration et initialisation Firebase
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -560,7 +555,7 @@ const fsListenDoc  = (col, id, cb) =>
 
 // ── Auth Google ───────────────────────────────────────────────
 const loginGoogle      = () => signInWithRedirect(auth, googleProvider);
-const getLoginRedirect = () => getRedirectResult(auth);
+const getLoginRedirect = () => Promise.resolve(null);
 const logoutGoogle = () => signOut(auth);
 const onAuth       = (cb) => onAuthStateChanged(auth, cb);
 
@@ -579,7 +574,6 @@ async function loginPin(pin) {
 }
 
 
-// ── SECTEURS ─────────────────────────────────────────────────
 // ============================================================
 // secteurs.js — Gestion des secteurs géographiques
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -727,7 +721,6 @@ async function statsGlobales() {
   };
 }
 
-// ── TOURNEE ──────────────────────────────────────────────────
 // ============================================================
 // tournee.js — Logique métier tournée calendriers
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -1006,7 +999,6 @@ function telechargerCSV(csv, filename = "bilan-tournee-calendriers.csv") {
   URL.revokeObjectURL(url);
 }
 
-// ── APP ──────────────────────────────────────────────────────
 // ============================================================
 // app.js — Routing, authentification, navigation principale
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -2030,13 +2022,10 @@ const initHash = window.location.hash || "#login";
 window.dispatchEvent(new HashChangeEvent("hashchange"));
 
   </script>
-
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then(r => console.log('SW OK:', r.scope))
-          .catch(e => console.warn('SW:', e));
+        navigator.serviceWorker.register('./sw.js').catch(()=>{});
       });
     }
   </script>
