@@ -378,7 +378,7 @@ body {
 .relances-count { font-weight: 600; margin-bottom: var(--sp-4); color: var(--rouge); }
 
 /* ══════════════════════════════════════════════════════════════
-   TERRAIN (interface équipier mobile)
+   TERRAIN (interface Amicaliste mobile)
    ══════════════════════════════════════════════════════════════ */
 .terrain-layout {
   min-height: 100vh; display: flex; flex-direction: column;
@@ -665,7 +665,7 @@ async function isAdmin(email) {
   return snap.exists();
 }
 
-// ── Auth PIN équipier ─────────────────────────────────────────
+// ── Auth PIN Amicaliste ─────────────────────────────────────────
 async function loginPin(pin) {
   const equipes = await fsQuery(COLLECTIONS.EQUIPES, where("pin", "==", pin));
   if (equipes.length === 0) return null;
@@ -1378,7 +1378,7 @@ async function afficherSecteursSurCarte(map, secteurs, equipes = []) {
   return layers;
 }
 
-// ── Afficher un seul secteur (vue terrain équipier) ──
+// ── Afficher un seul secteur (vue terrain Amicaliste) ──
 async function afficherSecteurUnique(map, secteur) {
   const codeInsee = COMMUNES_INSEE[secteur.commune];
   if (!codeInsee) return null;
@@ -1715,7 +1715,7 @@ getLoginRedirect().then(async (result) => {
 onAuth(async (user) => {
   console.log("onAuth fired, user:", user?.email || "null");
 
-  // Vérifier session PIN équipier en premier (indépendant de Google Auth)
+  // Vérifier session PIN Amicaliste en premier (indépendant de Google Auth)
   const sessionEquipe = sessionStorage.getItem("equipe");
   if (sessionEquipe && !user) {
     const eq = JSON.parse(sessionEquipe);
@@ -1773,7 +1773,7 @@ function renderLogin() {
 
         <div class="login-tabs">
           <button class="tab-btn tab-btn--active" data-tab="admin">Amicale</button>
-          <button class="tab-btn" data-tab="equipier">Équipier</button>
+          <button class="tab-btn" data-tab="equipier">Amicaliste</button>
         </div>
 
         <!-- Onglet Admin -->
@@ -1785,7 +1785,7 @@ function renderLogin() {
           </button>
         </div>
 
-        <!-- Onglet Équipier -->
+        <!-- Onglet Amicaliste -->
         <div id="tab-equipier" class="tab-panel hidden">
           <p class="login-hint">Saisis le code PIN de ton équipe (4 chiffres).</p>
           <div class="pin-display" id="pin-display">____</div>
@@ -2916,7 +2916,7 @@ async function renderConfig() {
       <input id="cfg-fin" class="input" type="date" value="${config.dateFin || ''}">
       <label class="label">Objectif de collecte (€)</label>
       <input id="cfg-objectif" class="input" type="number" value="${config.objectif || ''}">
-      <label class="label">Message affiché aux équipiers</label>
+      <label class="label">Message affiché aux Amicalistes</label>
       <textarea id="cfg-message" class="input textarea" rows="3">${config.messageEquipiers || ''}</textarea>
       <label class="label">Admins autorisés (emails, un par ligne)</label>
       <textarea id="cfg-admins" class="input textarea" rows="5">${(config.admins || []).join('\n')}</textarea>
@@ -2946,7 +2946,7 @@ async function renderConfig() {
 }
 
 // ════════════════════════════════════════════════════════════
-//  TERRAIN (vue équipier)
+//  TERRAIN (vue Amicaliste)
 // ════════════════════════════════════════════════════════════
 
 async function renderTerrain() {
