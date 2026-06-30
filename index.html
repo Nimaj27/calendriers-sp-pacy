@@ -1092,6 +1092,79 @@ function getCouleurEquipe(equipeId, toutesLesEquipes) {
   return PALETTE_EQUIPES[idx % PALETTE_EQUIPES.length];
 }
 
+// ── Charger dynamiquement Turf.js (calcul géométrique : enveloppe convexe) ──
+let _turfLoading = null;
+function chargerTurf() {
+  if (window.turf) return Promise.resolve();
+  if (_turfLoading) return _turfLoading;
+  _turfLoading = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Impossible de charger Turf.js"));
+    document.head.appendChild(script);
+  });
+  return _turfLoading;
+}
+
+// Cache des géocodages de rues (évite de re-fetch la même rue)
+const _geocodeCache = {};
+
+// ── Géocoder une rue dans une commune via l'API Adresse BAN ──
+async function geocoderRue(rue, commune) {
+  const cacheKey = `${rue}|${commune}`;
+  if (_geocodeCache[cacheKey] !== undefined) return _geocodeCache[cacheKey];
+  try {
+    const q = encodeURIComponent(`${rue} ${commune}`);
+    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${q}&limit=1`);
+    if (!res.ok) { _geocodeCache[cacheKey] = null; return null; }
+    const data = await res.json();
+    const feature = data.features?.[0];
+    const coords = feature ? feature.geometry.coordinates : null; // [lon, lat]
+    _geocodeCache[cacheKey] = coords;
+    return coords;
+  } catch (e) {
+    console.warn("Erreur géocodage", rue, commune, e);
+    _geocodeCache[cacheKey] = null;
+    return null;
+  }
+}
+
+// ── Calculer un polygone approximatif (enveloppe convexe) à partir des rues d'un secteur ──
+// Retourne un GeoJSON Polygon, ou null si pas assez de points pour former une zone
+async function calculerZoneApproximative(rues, commune) {
+  if (!rues || rues.length === 0) return null;
+  await chargerTurf();
+
+  const points = [];
+  for (const rue of rues) {
+    const coords = await geocoderRue(rue, commune);
+    if (coords) points.push(coords);
+  }
+
+  if (points.length < 3) {
+    // Pas assez de points pour un polygone : on fait un petit cercle autour du seul point dispo
+    if (points.length > 0) {
+      try {
+        const circle = turf.circle(points[0], 0.3, { units: "kilometers", steps: 24 });
+        return circle; // déjà un Feature complet
+      } catch (e) { return null; }
+    }
+    return null;
+  }
+
+  try {
+    const fc = turf.featureCollection(points.map(p => turf.point(p)));
+    const hull = turf.convex(fc);
+    if (!hull) return null;
+    // Légère expansion (buffer) pour que la zone ne soit pas trop "collée" aux points
+    return turf.buffer(hull, 0.15, { units: "kilometers" }) || hull; // Feature complet
+  } catch (e) {
+    console.warn("Erreur calcul enveloppe convexe", e);
+    return null;
+  }
+}
+
 // ── Récupérer le contour GeoJSON d'une commune via son code INSEE ──
 async function fetchContourCommune(codeInsee) {
   if (_contourCache[codeInsee]) return _contourCache[codeInsee];
@@ -1152,7 +1225,15 @@ async function afficherSecteursSurCarte(map, secteurs, equipes = []) {
     const codeInsee = COMMUNES_INSEE[secteur.commune];
     if (!codeInsee) continue;
 
-    const geojson = await fetchContourCommune(codeInsee);
+    // Si le secteur a des rues précisées, on tente une zone approximative par géocodage
+    // Sinon (ou en cas d'échec), on retombe sur le contour complet de la commune
+    let geojson = null;
+    if (secteur.rues && secteur.rues.length > 0) {
+      geojson = await calculerZoneApproximative(secteur.rues, secteur.commune);
+    }
+    if (!geojson) {
+      geojson = await fetchContourCommune(codeInsee);
+    }
     if (!geojson) continue;
 
     // Couleur = couleur de l'équipe affectée (stable et unique par équipe), sinon gris "libre"
