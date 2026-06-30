@@ -1410,14 +1410,56 @@ async function renderSecteurs() {
   document.getElementById("main").innerHTML = layoutAdmin("#secteurs", `
     <div class="page-header">
       <h1>Secteurs géographiques</h1>
-      <button id="btn-add-secteur" class="btn btn--primary">+ Nouveau secteur</button>
+      <div style="display:flex; gap:8px;">
+        <button id="btn-import-csv" class="btn btn--ghost">📥 Importer CSV</button>
+        <button id="btn-add-secteur" class="btn btn--primary">+ Nouveau secteur</button>
+      </div>
     </div>
     <div id="secteurs-list"><div class="loader">Chargement…</div></div>
     <div id="modal-secteur" class="modal hidden"></div>
+    <input type="file" id="input-csv" accept=".csv" class="hidden">
   `);
   bindLogout();
 
   document.getElementById("btn-add-secteur")?.addEventListener("click", () => showSecteurModal());
+
+  document.getElementById("btn-import-csv")?.addEventListener("click", () => {
+    document.getElementById("input-csv").click();
+  });
+
+  document.getElementById("input-csv")?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const headers = lines[0].split(',').map(h => h.trim());
+    let created = 0, errors = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      // Parse CSV simple (gère les champs vides)
+      const values = lines[i].split(',');
+      const row = {};
+      headers.forEach((h, idx) => row[h] = (values[idx] || '').trim());
+
+      if (!row.nom || !row.commune) continue;
+
+      try {
+        await creerSecteur({
+          nom: row.nom,
+          commune: row.commune,
+          description: row.description || '',
+          rues: row.rues ? row.rues.split(';').map(r => r.trim()).filter(Boolean) : [],
+          couleur: row.couleur || '#EF4444'
+        });
+        created++;
+      } catch(err) {
+        console.error('Erreur import ligne', i, err);
+        errors++;
+      }
+    }
+    toast(`Import terminé : ${created} secteur(s) créé(s)${errors ? `, ${errors} erreur(s)` : ''}`, errors ? "error" : "success");
+    e.target.value = '';
+  });
 
   const unsub = ecouterSecteurs(renderSecteursList);
   APP.unsubs.push(unsub);
