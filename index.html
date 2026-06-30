@@ -334,6 +334,7 @@ body {
 .secteur-card-header strong { flex: 1; font-size: .95rem; }
 .secteur-card-body { padding: var(--sp-3) var(--sp-4); }
 .secteur-equipe { font-size: .88rem; color: var(--ardoise-mid); margin-bottom: var(--sp-2); }
+.secteur-commune-label { font-size: .72rem; font-weight: 600; color: var(--ardoise-mid); text-transform: uppercase; letter-spacing: .04em; margin-bottom: var(--sp-2); }
 .secteur-montant { font-size: 1.1rem; font-weight: 700; color: var(--vert); }
 .secteur-rues { font-size: .78rem; color: var(--ardoise-mid); margin-top: var(--sp-2); line-height: 1.4; }
 .secteur-card-actions { display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); flex-wrap: wrap; background: var(--gris-fond); }
@@ -1675,11 +1676,25 @@ async function renderSecteurs() {
         <button id="btn-add-secteur" class="btn btn--primary">+ Nouveau secteur</button>
       </div>
     </div>
+    <div class="filter-bar">
+      <input id="search-secteur" class="input input--sm" placeholder="🔍 Rechercher une commune ou un secteur…" style="max-width:320px;">
+    </div>
     <div id="secteurs-list"><div class="loader">Chargement…</div></div>
     <div id="modal-secteur" class="modal hidden"></div>
     <input type="file" id="input-csv" accept=".csv" class="hidden">
   `);
   bindLogout();
+
+  let _secteursCache = [];
+
+  document.getElementById("search-secteur")?.addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    const filtered = q
+      ? _secteursCache.filter(s =>
+          s.commune.toLowerCase().includes(q) || s.nom.toLowerCase().includes(q))
+      : _secteursCache;
+    renderSecteursList(filtered);
+  });
 
   document.getElementById("btn-add-secteur")?.addEventListener("click", () => showSecteurModal());
 
@@ -1721,7 +1736,14 @@ async function renderSecteurs() {
     e.target.value = '';
   });
 
-  const unsub = ecouterSecteurs(renderSecteursList);
+  const unsub = ecouterSecteurs((secteurs) => {
+    _secteursCache = secteurs;
+    const q = document.getElementById("search-secteur")?.value.trim().toLowerCase() || '';
+    const filtered = q
+      ? secteurs.filter(s => s.commune.toLowerCase().includes(q) || s.nom.toLowerCase().includes(q))
+      : secteurs;
+    renderSecteursList(filtered);
+  });
   APP.unsubs.push(unsub);
 }
 
@@ -1729,37 +1751,38 @@ function renderSecteursList(secteurs) {
   const list = document.getElementById("secteurs-list");
   if (!list) return;
   if (secteurs.length === 0) {
-    list.innerHTML = `<p class="empty-state">Aucun secteur. Commence par en créer un.</p>`;
+    const hasSearch = document.getElementById("search-secteur")?.value.trim();
+    list.innerHTML = hasSearch
+      ? `<p class="empty-state">Aucun secteur ne correspond à « ${hasSearch} ».</p>`
+      : `<p class="empty-state">Aucun secteur. Commence par en créer un.</p>`;
     return;
   }
-  const communes = [...new Set(secteurs.map(s => s.commune))].sort();
-  list.innerHTML = communes.map(commune => `
-    <div class="commune-group">
-      <h3 class="commune-title">${commune}</h3>
-      <div class="secteurs-grid">
-        ${secteurs.filter(s => s.commune === commune).map(s => `
-          <div class="secteur-card secteur-card--${s.statut}" data-id="${s.id}">
-            <div class="secteur-card-header">
-              <span class="secteur-dot" style="background:${s.couleur || '#EF4444'}"></span>
-              <strong>${s.nom}</strong>
-              <span class="badge badge--${s.statut}">${STATUT_LABEL[s.statut]}</span>
-            </div>
-            <div class="secteur-card-body">
-              <div class="secteur-equipe">${s.equipNom ? '👥 ' + s.equipNom : '— Non affecté'}</div>
-              <div class="secteur-montant">${formatMontant(s.totalCollecte)}</div>
-              ${s.rues?.length ? `<div class="secteur-rues">${s.rues.join(', ')}</div>` : ''}
-            </div>
-            <div class="secteur-card-actions">
-              <button class="btn btn--sm btn--ghost" onclick="editSecteur('${s.id}')">✏️ Modifier</button>
-              <button class="btn btn--sm btn--ghost" onclick="affecterSecteur('${s.id}')">👥 Affecter</button>
-              ${s.statut !== 'termine' ? `<button class="btn btn--sm btn--ghost" onclick="clotureSecteur('${s.id}')">✅ Clôturer</button>` : ''}
-              <button class="btn btn--sm btn--danger" onclick="deleteSecteur('${s.id}')">🗑️</button>
-            </div>
+  const sorted = [...secteurs].sort((a, b) => (a.commune + a.nom).localeCompare(b.commune + b.nom));
+  list.innerHTML = `
+    <div class="secteurs-grid">
+      ${sorted.map(s => `
+        <div class="secteur-card secteur-card--${s.statut}" data-id="${s.id}">
+          <div class="secteur-card-header">
+            <span class="secteur-dot" style="background:${s.couleur || '#EF4444'}"></span>
+            <strong>${s.nom}</strong>
+            <span class="badge badge--${s.statut}">${STATUT_LABEL[s.statut]}</span>
           </div>
-        `).join('')}
-      </div>
+          <div class="secteur-card-body">
+            <div class="secteur-commune-label">${s.commune}</div>
+            <div class="secteur-equipe">${s.equipNom ? '👥 ' + s.equipNom : '— Non affecté'}</div>
+            <div class="secteur-montant">${formatMontant(s.totalCollecte)}</div>
+            ${s.rues?.length ? `<div class="secteur-rues">${s.rues.join(', ')}</div>` : ''}
+          </div>
+          <div class="secteur-card-actions">
+            <button class="btn btn--sm btn--ghost" onclick="editSecteur('${s.id}')">✏️ Modifier</button>
+            <button class="btn btn--sm btn--ghost" onclick="affecterSecteur('${s.id}')">👥 Affecter</button>
+            ${s.statut !== 'termine' ? `<button class="btn btn--sm btn--ghost" onclick="clotureSecteur('${s.id}')">✅ Clôturer</button>` : ''}
+            <button class="btn btn--sm btn--danger" onclick="deleteSecteur('${s.id}')">🗑️</button>
+          </div>
+        </div>
+      `).join('')}
     </div>
-  `).join('');
+  `;
 }
 
 window.editSecteur = async (id) => {
