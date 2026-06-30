@@ -1772,7 +1772,7 @@ function renderLogin() {
         </div>
 
         <div class="login-tabs">
-          <button class="tab-btn tab-btn--active" data-tab="admin">Chef d'amicale</button>
+          <button class="tab-btn tab-btn--active" data-tab="admin">Amicale</button>
           <button class="tab-btn" data-tab="equipier">Équipier</button>
         </div>
 
@@ -2984,7 +2984,7 @@ function renderTerrainSecteurs(secteurs) {
   const content = document.getElementById("terrain-content");
   if (!content) return;
   if (secteurs.length === 0) {
-    content.innerHTML = `<p class="empty-state terrain-empty">Aucun secteur assigné à ton équipe pour le moment.<br>Le chef d'amicale t'en attribuera prochainement.</p>`;
+    content.innerHTML = `<p class="empty-state terrain-empty">Aucun secteur assigné à ton équipe pour le moment.<br>L'Amicale t'en attribuera prochainement.</p>`;
     return;
   }
   content.innerHTML = `
