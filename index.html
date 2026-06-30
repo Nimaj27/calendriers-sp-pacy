@@ -278,16 +278,21 @@ body {
 .section-block h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: var(--sp-4); }
 
 /* Ranking équipes */
-.ranking-row {
-  display: flex; align-items: center; gap: var(--sp-3);
-  padding: var(--sp-3) 0; border-bottom: 1px solid var(--ardoise-light);
+.equipes-ranking-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-3);
 }
-.ranking-row:last-child { border: none; }
-.ranking-pos { width: 24px; font-weight: 700; color: var(--rouge); }
-.ranking-nom { flex: 1; font-weight: 500; }
-.ranking-montant { font-weight: 700; color: var(--vert); min-width: 90px; text-align: right; }
-.ranking-bar-wrap { width: 80px; height: 6px; background: var(--ardoise-light); border-radius: 99px; overflow: hidden; }
+.ranking-card {
+  background: var(--gris-fond); border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4); border: 1.5px solid var(--ardoise-light);
+}
+.ranking-card-top { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.ranking-pos { font-weight: 700; color: var(--rouge); font-size: .82rem; }
+.ranking-nom { font-weight: 600; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking-montant { font-weight: 700; color: var(--vert); font-size: 1.1rem; margin-bottom: var(--sp-2); }
+.ranking-bar-wrap { width: 100%; height: 6px; background: var(--ardoise-light); border-radius: 99px; overflow: hidden; margin-bottom: var(--sp-1); }
 .ranking-bar { height: 100%; background: var(--rouge); border-radius: 99px; transition: width .4s; }
+.ranking-sub { font-size: .75rem; color: var(--ardoise-mid); }
 
 /* ── Table ───────────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; }
@@ -312,7 +317,7 @@ body {
 /* ── Secteurs ────────────────────────────────────────────────── */
 .commune-group { margin-bottom: var(--sp-6); }
 .commune-title { font-size: .85rem; font-weight: 700; color: var(--ardoise-mid); text-transform: uppercase; letter-spacing: .06em; margin-bottom: var(--sp-3); }
-.secteurs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--sp-4); }
+.secteurs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-3); }
 .secteur-card {
   background: var(--blanc); border-radius: var(--r-lg);
   border: 1.5px solid var(--gris-bord); box-shadow: var(--shadow-sm);
@@ -464,7 +469,7 @@ body {
   .sidebar { display: none; }
   .admin-content { margin-left: 0; padding: var(--sp-4); }
   .stats-grid { grid-template-columns: 1fr 1fr; }
-  .secteurs-grid { grid-template-columns: 1fr; }
+  .secteurs-grid { grid-template-columns: repeat(2, 1fr); gap: var(--sp-2); }
   .page-header { flex-direction: column; align-items: flex-start; }
 }
 
@@ -1627,15 +1632,18 @@ async function renderDashboard() {
 
       <div class="section-block">
         <h2>Classement des équipes</h2>
-        <div class="equipes-ranking">
+        <div class="equipes-ranking-grid">
           ${stats.parEquipe.map((eq, i) => `
-            <div class="ranking-row">
-              <span class="ranking-pos">${i+1}</span>
-              <span class="ranking-nom">${eq.nom}</span>
-              <span class="ranking-montant">${formatMontant(eq.montant)}</span>
+            <div class="ranking-card">
+              <div class="ranking-card-top">
+                <span class="ranking-pos">#${i+1}</span>
+                <span class="ranking-nom">${eq.nom}</span>
+              </div>
+              <div class="ranking-montant">${formatMontant(eq.montant)}</div>
               <div class="ranking-bar-wrap">
                 <div class="ranking-bar" style="width:${stats.totalCollecte > 0 ? Math.round(eq.montant/stats.totalCollecte*100) : 0}%"></div>
               </div>
+              <div class="ranking-sub">${eq.nbPassages} passage(s)</div>
             </div>
           `).join('')}
         </div>
