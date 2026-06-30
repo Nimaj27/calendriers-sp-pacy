@@ -467,8 +467,7 @@ body {
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .sidebar { display: none; }
-  .admin-content { margin-left: 0; padding: var(--sp-4); }
+  .admin-content { margin-left: 200px; padding: var(--sp-3); }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .secteurs-grid { grid-template-columns: repeat(2, 1fr); gap: var(--sp-2); }
   .page-header { flex-direction: column; align-items: flex-start; }
@@ -522,16 +521,23 @@ body {
 }
 .sidebar-overlay:not(.hidden) { display: block; }
 
+/* ── Menu mobile : sidebar fixe réduite (pas de hamburger) ──── */
 @media (max-width: 767px) {
-  .mobile-topbar { display: flex; }
+  .mobile-topbar { display: none; }
+  .sidebar-overlay { display: none !important; }
   .sidebar {
     display: flex;
-    transform: translateX(-100%);
-    transition: transform .25s ease;
-    z-index: 200;
+    width: 180px; min-width: 180px;
+    transform: none;
   }
-  .sidebar--open { transform: translateX(0); }
-  .admin-content { margin-left: 0; padding-top: var(--sp-4); }
+  .sidebar-brand { padding: var(--sp-3); gap: var(--sp-2); }
+  .sidebar-brand img { width: 28px; height: 28px; }
+  .sidebar-title { font-size: .78rem; }
+  .sidebar-link { padding: var(--sp-2) var(--sp-3); font-size: .82rem; }
+  .sidebar-link-icon { font-size: 1rem; width: 16px; }
+  .sidebar-footer { padding: var(--sp-3); }
+  .sidebar-user { font-size: .68rem; }
+  .admin-content { margin-left: 180px; }
 }
 </style>
 </head>
