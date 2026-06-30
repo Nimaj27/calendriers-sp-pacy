@@ -539,6 +539,19 @@ body {
   .sidebar-user { font-size: .68rem; }
   .admin-content { margin-left: 180px; }
 }
+
+/* ── Historique multi-années ─────────────────────────────────── */
+.comparaison-summary {
+  display: flex; align-items: center; justify-content: space-around;
+  gap: var(--sp-4); padding: var(--sp-5);
+  background: var(--gris-fond); border-radius: var(--r-lg);
+  margin-bottom: var(--sp-5); flex-wrap: wrap;
+}
+.comparaison-total { text-align: center; }
+.comparaison-annee { display: block; font-size: .85rem; color: var(--ardoise-mid); font-weight: 600; margin-bottom: 4px; }
+.comparaison-montant { display: block; font-size: 1.5rem; font-weight: 700; color: var(--ardoise); }
+.comparaison-ecart { font-size: 1.2rem; font-weight: 700; }
+.comparaison-subtitle { font-size: 1rem; font-weight: 700; margin: var(--sp-5) 0 var(--sp-3); color: var(--ardoise); }
 </style>
 </head>
 <body>
@@ -1400,6 +1413,201 @@ function detruireCarte(map) {
 }
 
 // ============================================================
+// historique.js — Historique multi-années des tournées
+// Amicale SP Pacy-sur-Eure — Tournée Calendriers
+// ============================================================
+
+
+const COLLECTION_HISTORIQUE = "historique_saisons";
+
+// ── Archiver la saison en cours sous une année donnée ──────────
+// Capture un snapshot complet : secteurs, équipes, stats globales
+// Puis vide les collections actives pour repartir sur une saison neuve
+async function archiverSaison(annee) {
+  if (!annee || !/^\d{4}$/.test(String(annee))) {
+    throw new Error("Année invalide");
+  }
+
+  const [secteurs, equipes, stats] = await Promise.all([
+    lireSecteurs(),
+    lireEquipes(),
+    statsGlobalesTournee()
+  ]);
+
+  const snapshot = {
+    annee: Number(annee),
+    dateArchivage: new Date().toISOString(),
+    totalCollecte: stats.totalCollecte,
+    totalEspeces: stats.totalEspeces,
+    totalCheques: stats.totalCheques,
+    totalCarte: stats.totalCarte || 0,
+    nbDons: stats.nbDons,
+    nbPassages: stats.nbPassages,
+    nbSecteursTotal: stats.nbSecteursTotal,
+    nbSecteursTermines: stats.nbSecteursTermines,
+    secteurs: secteurs.map(s => ({
+      nom: s.nom,
+      commune: s.commune,
+      equipeNom: s.equipNom || null,
+      totalCollecte: s.totalCollecte || 0,
+      nbFoyersVisites: s.nbFoyersVisites || 0,
+      nbFoyersAbsents: s.nbFoyersAbsents || 0,
+      statut: s.statut
+    })),
+    equipes: stats.parEquipe.map(eq => ({
+      nom: eq.nom,
+      montant: eq.montant,
+      nbPassages: eq.nbPassages
+    }))
+  };
+
+  await fsSet(COLLECTION_HISTORIQUE, String(annee), snapshot);
+  return snapshot;
+}
+
+// ── Réinitialiser les collections actives pour une nouvelle saison ──
+// ⚠️ Supprime tous les secteurs, équipes et passages actuels
+// À utiliser uniquement après avoir archivé la saison précédente
+async function reinitialiserSaison() {
+  const batch = writeBatch(db);
+
+  const [secteursSnap, equipesSnap, passagesSnap] = await Promise.all([
+    getDocs(collection(db, COLLECTIONS.SECTEURS)),
+    getDocs(collection(db, COLLECTIONS.EQUIPES)),
+    getDocs(collection(db, COLLECTIONS.PASSAGES))
+  ]);
+
+  let count = 0;
+  secteursSnap.docs.forEach(d => { batch.delete(d.ref); count++; });
+  equipesSnap.docs.forEach(d => { batch.delete(d.ref); count++; });
+  passagesSnap.docs.forEach(d => { batch.delete(d.ref); count++; });
+
+  // Firestore limite les batchs à 500 opérations ; au-delà, on découpe
+  if (count <= 500) {
+    await batch.commit();
+  } else {
+    // Fallback : suppression sans batch si trop de documents
+    const allDocs = [...secteursSnap.docs, ...equipesSnap.docs, ...passagesSnap.docs];
+    for (const d of allDocs) {
+      await fsDelete(d.ref.parent.id, d.id);
+    }
+  }
+
+  return count;
+}
+
+// ── Lire l'historique d'une année spécifique ────────────────────
+async function lireSaison(annee) {
+  return fsGet(COLLECTION_HISTORIQUE, String(annee));
+}
+
+// ── Lire toutes les années archivées ─────────────────────────────
+async function lireToutesLesSaisons() {
+  const saisons = await fsGetAll(COLLECTION_HISTORIQUE);
+  return saisons.sort((a, b) => b.annee - a.annee); // plus récent en premier
+}
+
+// ── Saisie manuelle d'une saison passée (sans détail des passages) ──
+// Utile pour intégrer des données récupérées auprès de l'amicale
+// sans avoir à reconstituer tout l'historique des passages individuels
+async function saisirSaisonManuelle({
+  annee, totalCollecte, totalEspeces = 0, totalCheques = 0, totalCarte = 0,
+  nbDons = 0, nbPassages = 0, secteurs = [], equipes = [], note = ""
+}) {
+  if (!annee || !/^\d{4}$/.test(String(annee))) {
+    throw new Error("Année invalide");
+  }
+  const snapshot = {
+    annee: Number(annee),
+    dateArchivage: new Date().toISOString(),
+    saisieManuelle: true,
+    note,
+    totalCollecte: Number(totalCollecte) || 0,
+    totalEspeces: Number(totalEspeces) || 0,
+    totalCheques: Number(totalCheques) || 0,
+    totalCarte: Number(totalCarte) || 0,
+    nbDons: Number(nbDons) || 0,
+    nbPassages: Number(nbPassages) || 0,
+    nbSecteursTotal: secteurs.length,
+    nbSecteursTermines: secteurs.length,
+    secteurs: secteurs.map(s => ({
+      nom: s.nom || "",
+      commune: s.commune || "",
+      equipeNom: s.equipeNom || null,
+      totalCollecte: Number(s.totalCollecte) || 0,
+      nbFoyersVisites: 0,
+      nbFoyersAbsents: 0,
+      statut: "termine"
+    })),
+    equipes: equipes.map(eq => ({
+      nom: eq.nom || "",
+      montant: Number(eq.montant) || 0,
+      nbPassages: Number(eq.nbPassages) || 0
+    }))
+  };
+  await fsSet(COLLECTION_HISTORIQUE, String(annee), snapshot);
+  return snapshot;
+}
+
+// ── Supprimer une saison archivée ────────────────────────────────
+async function supprimerSaison(annee) {
+  return fsDelete(COLLECTION_HISTORIQUE, String(annee));
+}
+
+// ── Comparer deux saisons ─────────────────────────────────────────
+function comparerSaisons(saisonA, saisonB) {
+  if (!saisonA || !saisonB) return null;
+
+  const ecartTotal = saisonA.totalCollecte - saisonB.totalCollecte;
+  const ecartPourcent = saisonB.totalCollecte > 0
+    ? Math.round((ecartTotal / saisonB.totalCollecte) * 1000) / 10
+    : null;
+
+  // Comparaison par secteur (matching par nom de secteur)
+  const secteursB = Object.fromEntries((saisonB.secteurs || []).map(s => [s.nom, s]));
+  const comparaisonSecteurs = (saisonA.secteurs || []).map(sA => {
+    const sB = secteursB[sA.nom];
+    const ecart = sB ? sA.totalCollecte - sB.totalCollecte : null;
+    const ecartPct = sB && sB.totalCollecte > 0
+      ? Math.round((ecart / sB.totalCollecte) * 1000) / 10
+      : null;
+    return {
+      nom: sA.nom,
+      commune: sA.commune,
+      montantA: sA.totalCollecte,
+      montantB: sB ? sB.totalCollecte : null,
+      ecart, ecartPct,
+      tendance: ecart === null ? "nouveau" : ecart > 0 ? "hausse" : ecart < 0 ? "baisse" : "stable"
+    };
+  });
+
+  // Comparaison par équipe (matching par nom)
+  const equipesB = Object.fromEntries((saisonB.equipes || []).map(e => [e.nom, e]));
+  const comparaisonEquipes = (saisonA.equipes || []).map(eA => {
+    const eB = equipesB[eA.nom];
+    const ecart = eB ? eA.montant - eB.montant : null;
+    return {
+      nom: eA.nom,
+      montantA: eA.montant,
+      montantB: eB ? eB.montant : null,
+      ecart,
+      tendance: ecart === null ? "nouveau" : ecart > 0 ? "hausse" : ecart < 0 ? "baisse" : "stable"
+    };
+  });
+
+  return {
+    anneeA: saisonA.annee,
+    anneeB: saisonB.annee,
+    totalA: saisonA.totalCollecte,
+    totalB: saisonB.totalCollecte,
+    ecartTotal,
+    ecartPourcent,
+    comparaisonSecteurs: comparaisonSecteurs.sort((a, b) => (b.ecart || 0) - (a.ecart || 0)),
+    comparaisonEquipes: comparaisonEquipes.sort((a, b) => (b.ecart || 0) - (a.ecart || 0))
+  };
+}
+
+// ============================================================
 // app.js — Routing, authentification, navigation principale
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
 // ============================================================
@@ -1470,6 +1678,7 @@ const ROUTES = {
   "#equipes":            renderEquipes,
   "#passages":           renderPassages,
   "#relances":           renderRelances,
+  "#historique":         renderHistorique,
   "#config":             renderConfig,
   "#terrain":            renderTerrain,
   "#terrain-passages":   renderTerrainPassages
@@ -1692,6 +1901,7 @@ function layoutAdmin(activeHash, content) {
     { hash: "#equipes",   icon: "👥", label: "Équipes" },
     { hash: "#passages",  icon: "📋", label: "Passages" },
     { hash: "#relances",  icon: "🔔", label: "Relances" },
+    { hash: "#historique", icon: "📅", label: "Historique" },
     { hash: "#config",    icon: "⚙️",  label: "Config" }
   ];
   return `
@@ -2376,6 +2586,315 @@ async function renderRelances() {
     </div>
   `;
 }
+
+// ════════════════════════════════════════════════════════════
+//  HISTORIQUE MULTI-ANNÉES
+// ════════════════════════════════════════════════════════════
+
+async function renderHistorique() {
+  if (APP.role !== "admin") { naviguer("#login"); return; }
+  stopUnsubs();
+
+  document.getElementById("main").innerHTML = layoutAdmin("#historique", `
+    <div class="page-header">
+      <h1>Historique des tournées</h1>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="btn-saisie-manuelle" class="btn btn--ghost">✍️ Saisir une saison passée</button>
+        <button id="btn-archiver-saison" class="btn btn--primary">📦 Archiver la saison en cours</button>
+      </div>
+    </div>
+    <div id="historique-content"><div class="loader">Chargement…</div></div>
+    <div id="modal-historique" class="modal hidden"></div>
+  `);
+  bindLogout();
+
+  document.getElementById("btn-saisie-manuelle")?.addEventListener("click", () => showSaisieManuelleModal());
+  document.getElementById("btn-archiver-saison")?.addEventListener("click", () => showArchiverModal());
+
+  await chargerHistorique();
+}
+
+async function chargerHistorique() {
+  const content = document.getElementById("historique-content");
+  if (!content) return;
+  content.innerHTML = `<div class="loader">Chargement…</div>`;
+
+  const saisons = await lireToutesLesSaisons();
+
+  if (saisons.length === 0) {
+    content.innerHTML = `
+      <p class="empty-state">
+        Aucune saison archivée pour le moment.<br>
+        Utilise "Saisir une saison passée" pour intégrer les données récupérées auprès de l'amicale,
+        ou "Archiver la saison en cours" en fin de tournée actuelle.
+      </p>
+    `;
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="section-block">
+      <h2>Comparer deux saisons</h2>
+      <div class="filter-bar">
+        <select id="sel-saison-a" class="input input--sm">
+          ${saisons.map(s => `<option value="${s.annee}">${s.annee}</option>`).join('')}
+        </select>
+        <span style="align-self:center;">vs</span>
+        <select id="sel-saison-b" class="input input--sm">
+          ${saisons.map((s, i) => `<option value="${s.annee}" ${i === 1 ? 'selected' : ''}>${s.annee}</option>`).join('')}
+        </select>
+        <button id="btn-comparer" class="btn btn--primary btn--sm">Comparer</button>
+      </div>
+      <div id="comparaison-result"></div>
+    </div>
+
+    <div class="section-block">
+      <h2>Saisons archivées</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Année</th><th>Total collecté</th><th>Dons</th><th>Secteurs</th><th>Source</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${saisons.map(s => `
+              <tr>
+                <td><strong>${s.annee}</strong></td>
+                <td>${formatMontant(s.totalCollecte)}</td>
+                <td>${s.nbDons}</td>
+                <td>${s.nbSecteursTermines}/${s.nbSecteursTotal}</td>
+                <td>${s.saisieManuelle ? '✍️ Manuelle' : '📦 Archivée'}</td>
+                <td class="td-actions">
+                  <button class="btn btn--sm btn--ghost" onclick="voirDetailSaison(${s.annee})">👁️ Détail</button>
+                  <button class="btn btn--sm btn--danger" onclick="supprimerSaisonConfirm(${s.annee})">🗑️</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("btn-comparer")?.addEventListener("click", async () => {
+    const anneeA = document.getElementById("sel-saison-a").value;
+    const anneeB = document.getElementById("sel-saison-b").value;
+    if (anneeA === anneeB) { toast("Choisis deux années différentes", "error"); return; }
+
+    const [saisonA, saisonB] = await Promise.all([lireSaison(anneeA), lireSaison(anneeB)]);
+    const comp = comparerSaisons(saisonA, saisonB);
+    afficherComparaison(comp);
+  });
+}
+
+function afficherComparaison(comp) {
+  const el = document.getElementById("comparaison-result");
+  if (!el || !comp) return;
+
+  const tendanceIcon = (t) => t === "hausse" ? "📈" : t === "baisse" ? "📉" : t === "nouveau" ? "🆕" : "➡️";
+  const tendanceColor = (t) => t === "hausse" ? "var(--vert)" : t === "baisse" ? "var(--rouge)" : "var(--ardoise-mid)";
+
+  el.innerHTML = `
+    <div class="comparaison-summary">
+      <div class="comparaison-total">
+        <span class="comparaison-annee">${comp.anneeA}</span>
+        <span class="comparaison-montant">${formatMontant(comp.totalA)}</span>
+      </div>
+      <div class="comparaison-ecart" style="color:${comp.ecartTotal >= 0 ? 'var(--vert)' : 'var(--rouge)'}">
+        ${comp.ecartTotal >= 0 ? '+' : ''}${formatMontant(comp.ecartTotal)}
+        ${comp.ecartPourcent !== null ? `(${comp.ecartPourcent >= 0 ? '+' : ''}${comp.ecartPourcent}%)` : ''}
+      </div>
+      <div class="comparaison-total">
+        <span class="comparaison-annee">${comp.anneeB}</span>
+        <span class="comparaison-montant">${formatMontant(comp.totalB)}</span>
+      </div>
+    </div>
+
+    <h3 class="comparaison-subtitle">Par secteur</h3>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Secteur</th><th>${comp.anneeA}</th><th>${comp.anneeB}</th><th>Écart</th></tr></thead>
+        <tbody>
+          ${comp.comparaisonSecteurs.map(s => `
+            <tr>
+              <td>${s.nom}<br><small style="color:var(--ardoise-mid)">${s.commune}</small></td>
+              <td>${formatMontant(s.montantA)}</td>
+              <td>${s.montantB !== null ? formatMontant(s.montantB) : '—'}</td>
+              <td style="color:${tendanceColor(s.tendance)};font-weight:600;">
+                ${tendanceIcon(s.tendance)} ${s.ecart !== null ? (s.ecart >= 0 ? '+' : '') + formatMontant(s.ecart) : 'Nouveau'}
+                ${s.ecartPct !== null ? ` (${s.ecartPct >= 0 ? '+' : ''}${s.ecartPct}%)` : ''}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="comparaison-subtitle">Par équipe</h3>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Équipe</th><th>${comp.anneeA}</th><th>${comp.anneeB}</th><th>Écart</th></tr></thead>
+        <tbody>
+          ${comp.comparaisonEquipes.map(eq => `
+            <tr>
+              <td>${eq.nom}</td>
+              <td>${formatMontant(eq.montantA)}</td>
+              <td>${eq.montantB !== null ? formatMontant(eq.montantB) : '—'}</td>
+              <td style="color:${tendanceColor(eq.tendance)};font-weight:600;">
+                ${tendanceIcon(eq.tendance)} ${eq.ecart !== null ? (eq.ecart >= 0 ? '+' : '') + formatMontant(eq.ecart) : 'Nouveau'}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+window.voirDetailSaison = async (annee) => {
+  const saison = await lireSaison(annee);
+  if (!saison) return;
+  const modal = document.getElementById("modal-historique");
+  modal.innerHTML = `
+    <div class="modal-inner">
+      <h2>Saison ${saison.annee}</h2>
+      <div class="stats-grid" style="margin-bottom:16px;">
+        <div class="stat-card stat-card--primary">
+          <div class="stat-value">${formatMontant(saison.totalCollecte)}</div>
+          <div class="stat-label">Total collecté</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${saison.nbDons}</div>
+          <div class="stat-label">Dons reçus</div>
+        </div>
+      </div>
+      <h3 class="comparaison-subtitle">Secteurs (${saison.secteurs?.length || 0})</h3>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Secteur</th><th>Équipe</th><th>Montant</th></tr></thead>
+          <tbody>
+            ${(saison.secteurs || []).map(s => `
+              <tr><td>${s.nom}</td><td>${s.equipeNom || '—'}</td><td>${formatMontant(s.totalCollecte)}</td></tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" onclick="closeModal()">Fermer</button>
+      </div>
+    </div>
+  `;
+  modal.classList.remove("hidden");
+};
+
+window.supprimerSaisonConfirm = async (annee) => {
+  if (!confirm(`Supprimer définitivement l'archive de la saison ${annee} ?`)) return;
+  try {
+    await supprimerSaison(annee);
+    toast("Saison supprimée", "success");
+    await chargerHistorique();
+  } catch(e) { toast(e.message, "error"); }
+};
+
+function showSaisieManuelleModal() {
+  const modal = document.getElementById("modal-historique");
+  modal.innerHTML = `
+    <div class="modal-inner">
+      <h2>Saisir une saison passée</h2>
+      <p class="login-hint">Renseigne les totaux récupérés auprès de l'amicale. Le détail des secteurs est optionnel.</p>
+      <label class="label">Année *</label>
+      <input id="sm-annee" class="input" type="number" placeholder="2025" min="2000" max="2099">
+      <label class="label">Total collecté (€) *</label>
+      <input id="sm-total" class="input" type="number" step="0.01" placeholder="0.00">
+      <label class="label">Dont espèces (€)</label>
+      <input id="sm-especes" class="input" type="number" step="0.01" placeholder="0.00">
+      <label class="label">Dont chèques (€)</label>
+      <input id="sm-cheques" class="input" type="number" step="0.01" placeholder="0.00">
+      <label class="label">Nombre de dons</label>
+      <input id="sm-nbdons" class="input" type="number" placeholder="0">
+      <label class="label">Détail par secteur (optionnel — format : nom,commune,montant — un par ligne)</label>
+      <textarea id="sm-secteurs" class="input textarea" rows="6" placeholder="Chambray,Chambray,250.00&#10;Boncourt,Boncourt,180.50"></textarea>
+      <label class="label">Note</label>
+      <input id="sm-note" class="input" placeholder="Source des données, remarques...">
+      <div class="modal-actions">
+        <button id="btn-save-sm" class="btn btn--primary">Enregistrer</button>
+        <button class="btn btn--ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  `;
+  modal.classList.remove("hidden");
+
+  document.getElementById("btn-save-sm")?.addEventListener("click", async () => {
+    const annee = document.getElementById("sm-annee").value;
+    const totalCollecte = document.getElementById("sm-total").value;
+    if (!annee || !totalCollecte) { toast("Année et total obligatoires", "error"); return; }
+
+    const secteursRaw = document.getElementById("sm-secteurs").value.trim();
+    const secteurs = secteursRaw ? secteursRaw.split('\n').map(line => {
+      const [nom, commune, montant] = line.split(',').map(s => s.trim());
+      return { nom, commune, totalCollecte: parseFloat(montant) || 0 };
+    }).filter(s => s.nom) : [];
+
+    try {
+      await saisirSaisonManuelle({
+        annee,
+        totalCollecte: parseFloat(totalCollecte),
+        totalEspeces: parseFloat(document.getElementById("sm-especes").value) || 0,
+        totalCheques: parseFloat(document.getElementById("sm-cheques").value) || 0,
+        nbDons: parseInt(document.getElementById("sm-nbdons").value) || 0,
+        secteurs,
+        note: document.getElementById("sm-note").value.trim()
+      });
+      toast(`Saison ${annee} enregistrée ✅`, "success");
+      closeModal();
+      await chargerHistorique();
+    } catch(e) { toast(e.message, "error"); }
+  });
+}
+
+function showArchiverModal() {
+  const modal = document.getElementById("modal-historique");
+  const anneeActuelle = new Date().getFullYear();
+  modal.innerHTML = `
+    <div class="modal-inner">
+      <h2>Archiver la saison en cours</h2>
+      <p class="login-hint" style="color:var(--rouge);font-weight:600;">
+        ⚠️ Cette action va sauvegarder un instantané de toutes les données actuelles (secteurs, équipes, totaux),
+        puis SUPPRIMER les secteurs, équipes et passages actuels pour repartir sur une saison vierge.
+        Cette action est irréversible.
+      </p>
+      <label class="label">Année à archiver</label>
+      <input id="arch-annee" class="input" type="number" value="${anneeActuelle}" min="2000" max="2099">
+      <label class="checkbox-label" style="margin-top:16px;">
+        <input type="checkbox" id="arch-confirm">
+        Je confirme vouloir archiver et réinitialiser la tournée
+      </label>
+      <div class="modal-actions">
+        <button id="btn-confirm-archiver" class="btn btn--danger" disabled>📦 Archiver et réinitialiser</button>
+        <button class="btn btn--ghost" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  `;
+  modal.classList.remove("hidden");
+
+  const checkbox = document.getElementById("arch-confirm");
+  const btnConfirm = document.getElementById("btn-confirm-archiver");
+  checkbox?.addEventListener("change", () => { btnConfirm.disabled = !checkbox.checked; });
+
+  btnConfirm?.addEventListener("click", async () => {
+    const annee = document.getElementById("arch-annee").value;
+    setLoading(btnConfirm, true);
+    try {
+      await archiverSaison(annee);
+      const nbSupprimes = await reinitialiserSaison();
+      toast(`Saison ${annee} archivée ✅ — ${nbSupprimes} document(s) réinitialisé(s)`, "success");
+      closeModal();
+      await chargerHistorique();
+    } catch(e) {
+      toast("Erreur : " + e.message, "error");
+      setLoading(btnConfirm, false);
+    }
+  });
+}
+
+
 
 // ════════════════════════════════════════════════════════════
 //  CONFIG
