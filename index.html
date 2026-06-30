@@ -1968,7 +1968,8 @@ async function renderEquipes() {
   document.getElementById("main").innerHTML = layoutAdmin("#equipes", `
     <div class="page-header">
       <h1>Équipes</h1>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="btn-auto-affecter" class="btn btn--ghost">🔗 Affecter par nom</button>
         <button id="btn-import-csv-equipe" class="btn btn--ghost">📥 Importer CSV</button>
         <button id="btn-add-equipe" class="btn btn--primary">+ Nouvelle équipe</button>
       </div>
@@ -1980,6 +1981,41 @@ async function renderEquipes() {
   bindLogout();
 
   document.getElementById("btn-add-equipe")?.addEventListener("click", () => showEquipeModal());
+
+  document.getElementById("btn-auto-affecter")?.addEventListener("click", async () => {
+    if (!confirm("Affecter automatiquement chaque secteur à l'équipe portant son nom (ex: secteur \"Chambray\" → équipe \"Équipe Chambray\") ?\n\nLes secteurs déjà affectés à une autre équipe seront écrasés s'il y a correspondance.")) return;
+
+    const btn = document.getElementById("btn-auto-affecter");
+    setLoading(btn, true);
+    try {
+      const [equipes, secteurs] = await Promise.all([lireEquipes(), lireSecteurs()]);
+
+      // Normalise un nom pour matcher : minuscules, sans accents, sans "équipe "
+      const normalize = (s) => s
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/^equipe\s+/i, "")
+        .trim();
+
+      const equipesParNom = {};
+      equipes.forEach(eq => { equipesParNom[normalize(eq.nom)] = eq; });
+
+      let affectes = 0, sansMatch = 0;
+      for (const s of secteurs) {
+        const match = equipesParNom[normalize(s.nom)];
+        if (match) {
+          await affecterEquipe(s.id, match.id, match.nom);
+          affectes++;
+        } else {
+          sansMatch++;
+        }
+      }
+      toast(`Affectation automatique : ${affectes} secteur(s) affecté(s)${sansMatch ? `, ${sansMatch} sans correspondance` : ''}`, "success");
+    } catch(e) {
+      toast("Erreur : " + e.message, "error");
+    }
+    setLoading(btn, false);
+  });
 
   document.getElementById("btn-import-csv-equipe")?.addEventListener("click", () => {
     document.getElementById("input-csv-equipe").click();
