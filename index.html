@@ -489,7 +489,6 @@ body {
   <div id="main"></div>
   <div id="toasts" aria-live="polite"></div>
   <script type="module">
-// ── FIREBASE ─────────────────────────────────────────────────
 // ============================================================
 // firebase.js — Configuration et initialisation Firebase
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -587,7 +586,6 @@ async function loginPin(pin) {
 }
 
 
-// ── SECTEURS ─────────────────────────────────────────────────
 // ============================================================
 // secteurs.js — Gestion des secteurs géographiques
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -738,7 +736,6 @@ async function statsGlobales() {
   };
 }
 
-// ── TOURNEE ──────────────────────────────────────────────────
 // ============================================================
 // tournee.js — Logique métier tournée calendriers
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -1016,7 +1013,6 @@ function telechargerCSV(csv, filename = "bilan-tournee-calendriers.csv") {
   URL.revokeObjectURL(url);
 }
 
-// ── CARTE ────────────────────────────────────────────────────
 // ============================================================
 // carte.js — Carte Leaflet avec contours communes (geo.api.gouv.fr)
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -1024,36 +1020,36 @@ function telechargerCSV(csv, filename = "bilan-tournee-calendriers.csv") {
 
 // Mapping nom de commune (tel que saisi dans secteurs.commune) → code INSEE
 const COMMUNES_INSEE = {
-  "Chambray": "27138",
-  "Rouvray": "27522",
+  "Chambray": "27140",
+  "Rouvray": "27501",
   "Houlbec-Cocherel": "27343",
-  "Ménilles": "27408",
-  "Menilles": "27408",
-  "Douains": "27210",
-  "Saint-Vincent-des-Bois": "27566",
-  "La Heunière": "27325",
-  "La Heuniere": "27325",
-  "Caillouet-Orgeville": "27121",
-  "Boncourt": "27085",
-  "Vaux-sur-Eure": "27649",
-  "Jouy-sur-Eure": "27353",
-  "Fontaine-sous-Jouy": "27250",
+  "Ménilles": "27397",
+  "Menilles": "27397",
+  "Douains": "27203",
+  "Saint-Vincent-des-Bois": "27612",
+  "La Heunière": "27336",
+  "La Heuniere": "27336",
+  "Caillouet-Orgeville": "27123",
+  "Boncourt": "27081",
+  "Vaux-sur-Eure": "27674",
+  "Jouy-sur-Eure": "27358",
+  "Fontaine-sous-Jouy": "27254",
   "Le Plessis-Hébert": "27465",
   "Le Plessis-Hebert": "27465",
-  "Le Cormier": "27178",
-  "Boisset-les-Prévanches": "27082",
-  "Boisset-les-Prevanches": "27082",
-  "Mérey": "27409",
-  "Merey": "27409",
-  "Fains": "27240",
-  "Hécourt": "27328",
-  "Hecourt": "27328",
-  "Breuilpont": "27108",
+  "Le Cormier": "27171",
+  "Boisset-les-Prévanches": "27076",
+  "Boisset-les-Prevanches": "27076",
+  "Mérey": "27400",
+  "Merey": "27400",
+  "Fains": "27231",
+  "Hécourt": "27326",
+  "Hecourt": "27326",
+  "Breuilpont": "27114",
   "Neuilly": "27429",
-  "Aigleville": "27003",
-  "Chaignes": "27137",
-  "Croisy-sur-Eure": "27187",
-  "Villegats": "27688",
+  "Aigleville": "27004",
+  "Chaignes": "27136",
+  "Croisy-sur-Eure": "27190",
+  "Villegats": "27689",
   "Pacy-sur-Eure": "27448"
 };
 
@@ -1201,7 +1197,6 @@ function detruireCarte(map) {
   }
 }
 
-// ── APP ──────────────────────────────────────────────────────
 // ============================================================
 // app.js — Routing, authentification, navigation principale
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
