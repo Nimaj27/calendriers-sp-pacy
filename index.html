@@ -1078,9 +1078,14 @@ const COULEUR_STATUT = {
 
 // Palette de couleurs distinctes pour les équipes (cycle si >12 équipes)
 const PALETTE_EQUIPES = [
-  "#EF4444", "#F97316", "#EAB308", "#22C55E", "#10B981",
-  "#06B6D4", "#3B82F6", "#6366F1", "#8B5CF6", "#D946EF",
-  "#EC4899", "#F43F5E"
+  "#EF4444", "#F97316", "#EAB308", "#84CC16", "#22C55E",
+  "#10B981", "#14B8A6", "#06B6D4", "#0EA5E9", "#3B82F6",
+  "#6366F1", "#8B5CF6", "#A855F7", "#D946EF", "#EC4899",
+  "#F43F5E", "#B91C1C", "#C2410C", "#A16207", "#4D7C0F",
+  "#15803D", "#047857", "#0F766E", "#0E7490", "#0369A1",
+  "#1D4ED8", "#4338CA", "#6D28D9", "#7E22CE", "#A21CAF",
+  "#BE185D", "#9F1239", "#7C2D12", "#854D0E", "#3F6212",
+  "#166534", "#065F46", "#155E75", "#1E3A8A", "#312E81"
 ];
 
 // Attribue une couleur stable à chaque équipe (même équipe = même couleur toujours)
@@ -1963,14 +1968,53 @@ async function renderEquipes() {
   document.getElementById("main").innerHTML = layoutAdmin("#equipes", `
     <div class="page-header">
       <h1>Équipes</h1>
-      <button id="btn-add-equipe" class="btn btn--primary">+ Nouvelle équipe</button>
+      <div style="display:flex; gap:8px;">
+        <button id="btn-import-csv-equipe" class="btn btn--ghost">📥 Importer CSV</button>
+        <button id="btn-add-equipe" class="btn btn--primary">+ Nouvelle équipe</button>
+      </div>
     </div>
     <div id="equipes-list"><div class="loader">Chargement…</div></div>
     <div id="modal-equipe" class="modal hidden"></div>
+    <input type="file" id="input-csv-equipe" accept=".csv" class="hidden">
   `);
   bindLogout();
 
   document.getElementById("btn-add-equipe")?.addEventListener("click", () => showEquipeModal());
+
+  document.getElementById("btn-import-csv-equipe")?.addEventListener("click", () => {
+    document.getElementById("input-csv-equipe").click();
+  });
+
+  document.getElementById("input-csv-equipe")?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const headers = lines[0].split(',').map(h => h.trim());
+    let created = 0, errors = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',');
+      const row = {};
+      headers.forEach((h, idx) => row[h] = (values[idx] || '').trim());
+
+      if (!row.nom || !row.pin) continue;
+
+      try {
+        await creerEquipe({
+          nom: row.nom,
+          pin: row.pin,
+          membres: row.membres ? row.membres.split(';').map(m => m.trim()).filter(Boolean) : []
+        });
+        created++;
+      } catch(err) {
+        console.error('Erreur import ligne', i, err);
+        errors++;
+      }
+    }
+    toast(`Import terminé : ${created} équipe(s) créée(s)${errors ? `, ${errors} erreur(s)` : ''}`, errors ? "error" : "success");
+    e.target.value = '';
+  });
 
   const unsub = ecouterEquipes(renderEquipesList);
   APP.unsubs.push(unsub);
