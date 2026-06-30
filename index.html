@@ -471,12 +471,25 @@ body {
 @media (min-width: 768px) {
   .terrain-layout { max-width: 600px; margin: 0 auto; }
 }
+
+/* ── Carte (Leaflet) ─────────────────────────────────────────── */
+.map-legend {
+  display: flex; gap: var(--sp-4); flex-wrap: wrap;
+  margin-top: var(--sp-3); font-size: .82rem; color: var(--ardoise-mid);
+}
+.map-legend span { display: flex; align-items: center; gap: 6px; }
+.map-legend i {
+  display: inline-block; width: 12px; height: 12px;
+  border-radius: 3px; flex-shrink: 0;
+}
+.leaflet-popup-content-wrapper { border-radius: var(--r-md); }
 </style>
 </head>
 <body>
   <div id="main"></div>
   <div id="toasts" aria-live="polite"></div>
   <script type="module">
+// ── FIREBASE ─────────────────────────────────────────────────
 // ============================================================
 // firebase.js — Configuration et initialisation Firebase
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -574,6 +587,7 @@ async function loginPin(pin) {
 }
 
 
+// ── SECTEURS ─────────────────────────────────────────────────
 // ============================================================
 // secteurs.js — Gestion des secteurs géographiques
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -724,6 +738,7 @@ async function statsGlobales() {
   };
 }
 
+// ── TOURNEE ──────────────────────────────────────────────────
 // ============================================================
 // tournee.js — Logique métier tournée calendriers
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -1001,6 +1016,192 @@ function telechargerCSV(csv, filename = "bilan-tournee-calendriers.csv") {
   URL.revokeObjectURL(url);
 }
 
+// ── CARTE ────────────────────────────────────────────────────
+// ============================================================
+// carte.js — Carte Leaflet avec contours communes (geo.api.gouv.fr)
+// Amicale SP Pacy-sur-Eure — Tournée Calendriers
+// ============================================================
+
+// Mapping nom de commune (tel que saisi dans secteurs.commune) → code INSEE
+const COMMUNES_INSEE = {
+  "Chambray": "27138",
+  "Rouvray": "27522",
+  "Houlbec-Cocherel": "27343",
+  "Ménilles": "27408",
+  "Menilles": "27408",
+  "Douains": "27210",
+  "Saint-Vincent-des-Bois": "27566",
+  "La Heunière": "27325",
+  "La Heuniere": "27325",
+  "Caillouet-Orgeville": "27121",
+  "Boncourt": "27085",
+  "Vaux-sur-Eure": "27649",
+  "Jouy-sur-Eure": "27353",
+  "Fontaine-sous-Jouy": "27250",
+  "Le Plessis-Hébert": "27465",
+  "Le Plessis-Hebert": "27465",
+  "Le Cormier": "27178",
+  "Boisset-les-Prévanches": "27082",
+  "Boisset-les-Prevanches": "27082",
+  "Mérey": "27409",
+  "Merey": "27409",
+  "Fains": "27240",
+  "Hécourt": "27328",
+  "Hecourt": "27328",
+  "Breuilpont": "27108",
+  "Neuilly": "27429",
+  "Aigleville": "27003",
+  "Chaignes": "27137",
+  "Croisy-sur-Eure": "27187",
+  "Villegats": "27688",
+  "Pacy-sur-Eure": "27448"
+};
+
+// Cache des contours GeoJSON déjà récupérés (évite de re-fetch)
+const _contourCache = {};
+
+// Couleurs par statut de secteur
+const COULEUR_STATUT = {
+  libre:    "#9CA3AF",
+  affecte:  "#3B82F6",
+  en_cours: "#EAB308",
+  termine:  "#22C55E"
+};
+
+// ── Récupérer le contour GeoJSON d'une commune via son code INSEE ──
+async function fetchContourCommune(codeInsee) {
+  if (_contourCache[codeInsee]) return _contourCache[codeInsee];
+  try {
+    const res = await fetch(`https://geo.api.gouv.fr/communes/${codeInsee}?format=geojson&geometry=contour`);
+    if (!res.ok) return null;
+    const geojson = await res.json();
+    _contourCache[codeInsee] = geojson;
+    return geojson;
+  } catch (e) {
+    console.warn("Erreur fetch contour", codeInsee, e);
+    return null;
+  }
+}
+
+// ── Charger dynamiquement Leaflet (CSS + JS) si pas déjà fait ──
+let _leafletLoading = null;
+function chargerLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (_leafletLoading) return _leafletLoading;
+
+  _leafletLoading = new Promise((resolve, reject) => {
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+    document.head.appendChild(css);
+
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Impossible de charger Leaflet"));
+    document.head.appendChild(script);
+  });
+  return _leafletLoading;
+}
+
+// ── Initialiser une carte Leaflet dans un conteneur ──
+async function initCarte(containerId, options = {}) {
+  await chargerLeaflet();
+  const map = L.map(containerId, {
+    center: options.center || [49.029, 1.398], // Pacy-sur-Eure approx
+    zoom: options.zoom || 11,
+    scrollWheelZoom: options.scrollWheelZoom !== false
+  });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map);
+  return map;
+}
+
+// ── Afficher tous les secteurs sur une carte avec couleur selon statut ──
+async function afficherSecteursSurCarte(map, secteurs) {
+  const layers = [];
+  const bounds = [];
+
+  for (const secteur of secteurs) {
+    const codeInsee = COMMUNES_INSEE[secteur.commune];
+    if (!codeInsee) continue;
+
+    const geojson = await fetchContourCommune(codeInsee);
+    if (!geojson) continue;
+
+    const couleur = secteur.couleur || COULEUR_STATUT[secteur.statut] || "#9CA3AF";
+
+    const layer = L.geoJSON(geojson, {
+      style: {
+        color: couleur,
+        weight: 2,
+        fillColor: couleur,
+        fillOpacity: secteur.statut === "termine" ? 0.55 : secteur.statut === "en_cours" ? 0.4 : 0.25
+      }
+    });
+
+    const popupContent = `
+      <div style="font-family:Inter,sans-serif;min-width:160px;">
+        <strong style="font-size:13px;">${secteur.nom}</strong><br>
+        <span style="font-size:12px;color:#666;">${secteur.commune}</span><br>
+        <span style="font-size:12px;">👥 ${secteur.equipNom || 'Non affecté'}</span><br>
+        <span style="font-size:12px;font-weight:700;color:#16A34A;">${Number(secteur.totalCollecte || 0).toLocaleString('fr-FR')} €</span>
+      </div>
+    `;
+    layer.bindPopup(popupContent);
+    layer.addTo(map);
+    layers.push(layer);
+
+    const b = layer.getBounds();
+    if (b.isValid()) bounds.push(b);
+  }
+
+  if (bounds.length > 0) {
+    let allBounds = bounds[0];
+    bounds.forEach(b => { allBounds = allBounds.extend(b); });
+    map.fitBounds(allBounds, { padding: [20, 20] });
+  }
+
+  return layers;
+}
+
+// ── Afficher un seul secteur (vue terrain équipier) ──
+async function afficherSecteurUnique(map, secteur) {
+  const codeInsee = COMMUNES_INSEE[secteur.commune];
+  if (!codeInsee) return null;
+
+  const geojson = await fetchContourCommune(codeInsee);
+  if (!geojson) return null;
+
+  const couleur = secteur.couleur || "#CC1D1D";
+  const layer = L.geoJSON(geojson, {
+    style: {
+      color: couleur,
+      weight: 3,
+      fillColor: couleur,
+      fillOpacity: 0.3
+    }
+  });
+  layer.addTo(map);
+
+  const bounds = layer.getBounds();
+  if (bounds.isValid()) {
+    map.fitBounds(bounds, { padding: [30, 30] });
+  }
+
+  return layer;
+}
+
+// ── Nettoyer une carte (avant de la recréer) ──
+function detruireCarte(map) {
+  if (map) {
+    try { map.remove(); } catch(e) {}
+  }
+}
+
+// ── APP ──────────────────────────────────────────────────────
 // ============================================================
 // app.js — Routing, authentification, navigation principale
 // Amicale SP Pacy-sur-Eure — Tournée Calendriers
@@ -1333,8 +1534,38 @@ async function renderDashboard() {
     <div id="dashboard-content">
       <div class="loader">Chargement…</div>
     </div>
+    <div class="section-block">
+      <h2>Carte des secteurs</h2>
+      <div id="dashboard-map" style="height:420px;border-radius:12px;overflow:hidden;"></div>
+      <div class="map-legend">
+        <span><i style="background:#9CA3AF"></i> Non affecté</span>
+        <span><i style="background:#3B82F6"></i> Affecté</span>
+        <span><i style="background:#EAB308"></i> En cours</span>
+        <span><i style="background:#22C55E"></i> Terminé</span>
+      </div>
+    </div>
   `);
   bindLogout();
+
+  // Initialiser la carte
+  let dashboardMap = null;
+  initCarte("dashboard-map", { zoom: 11 }).then(map => { dashboardMap = map; refreshCarte(); });
+
+  async function refreshCarte() {
+    if (!dashboardMap) return;
+    const secteurs = await lireSecteurs();
+    // Nettoyer les anciennes couches
+    dashboardMap.eachLayer(l => { if (l.options && l.options.attribution === undefined) dashboardMap.removeLayer(l); });
+    // Recréer le fond de carte si besoin
+    if (!dashboardMap._hasTileLayer) {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(dashboardMap);
+      dashboardMap._hasTileLayer = true;
+    }
+    await afficherSecteursSurCarte(dashboardMap, secteurs.map(s => ({
+      ...s,
+      couleur: COULEUR_STATUT[s.statut] || s.couleur
+    })));
+  }
 
   document.getElementById("btn-export")?.addEventListener("click", async () => {
     try {
@@ -1393,9 +1624,10 @@ async function renderDashboard() {
   }
 
   await refreshDashboard();
+  await refreshCarte();
 
-  // Écoute temps réel sur secteurs → rafraîchit les stats
-  const unsub = ecouterSecteurs(async () => { await refreshDashboard(); });
+  // Écoute temps réel sur secteurs → rafraîchit les stats + carte
+  const unsub = ecouterSecteurs(async () => { await refreshDashboard(); await refreshCarte(); });
   APP.unsubs.push(unsub);
 }
 
@@ -1939,6 +2171,9 @@ async function renderTerrainPassages() {
         <span class="badge badge--${secteur.statut}">${STATUT_LABEL[secteur.statut]}</span>
       </header>
 
+      <!-- Mini carte du secteur -->
+      <div id="terrain-secteur-map" style="height:200px;margin:0 16px 16px;border-radius:12px;overflow:hidden;border:1.5px solid var(--gris-bord);"></div>
+
       <!-- Formulaire passage rapide -->
       <div class="passage-form">
         <input id="p-adresse" class="input" placeholder="Adresse / numéro (optionnel)" autocomplete="off">
@@ -1975,6 +2210,11 @@ async function renderTerrainPassages() {
       </div>
     </div>
   `;
+
+  // Mini carte du secteur
+  initCarte("terrain-secteur-map", { zoom: 13, scrollWheelZoom: false }).then(map => {
+    afficherSecteurUnique(map, secteur);
+  });
 
   let statutSelectionne = null;
   let modeSelectionne   = "especes";
