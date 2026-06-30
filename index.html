@@ -525,7 +525,7 @@ import {
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager,
+  persistentSingleTabManager,
   collection,
   doc,
   getDoc,
@@ -557,17 +557,16 @@ const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
 // Firestore avec cache persistant IndexedDB (mode hors-ligne)
-// Permet lecture/écriture même sans réseau ; synchronisation auto au retour de connexion
+// Single-tab manager : plus robuste sur mobile que multi-tab
 let db;
 try {
   db = initializeFirestore(app, {
     localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
+      tabManager: persistentSingleTabManager({ forceOwnership: false })
     })
   });
 } catch (e) {
-  // Fallback si la persistence échoue (navigateur non supporté, mode privé strict...)
-  console.warn("Persistence hors-ligne indisponible, fallback mémoire :", e.message);
+  console.warn("Persistence hors-ligne indisponible, fallback mémoire :", e?.message || e);
   db = getFirestore(app);
 }
 
