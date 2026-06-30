@@ -759,7 +759,8 @@ const STATUT_PASSAGE_LABEL = {
 
 const MODE_PAIEMENT = {
   ESPECES: "especes",
-  CHEQUE:  "cheque"
+  CHEQUE:  "cheque",
+  CARTE:   "carte"
 };
 
 // ════════════════════════════════════════════════════════════
@@ -898,6 +899,7 @@ async function statsGlobalesTournee() {
 
   let totalEspeces = 0;
   let totalCheques = 0;
+  let totalCarte   = 0;
   let nbDons       = 0;
   let nbRefus      = 0;
   let nbAbsents    = 0;
@@ -908,13 +910,14 @@ async function statsGlobalesTournee() {
       nbDons++;
       if (p.modePaiement === "especes") totalEspeces += Number(p.montant || 0);
       else if (p.modePaiement === "cheque") totalCheques += Number(p.montant || 0);
+      else if (p.modePaiement === "carte") totalCarte += Number(p.montant || 0);
     }
     if (p.statut === "refuse")  nbRefus++;
     if (p.statut === "absent")  nbAbsents++;
     if (p.statut === "relance") nbRelances++;
   }
 
-  const totalCollecte = totalEspeces + totalCheques;
+  const totalCollecte = totalEspeces + totalCheques + totalCarte;
 
   // Par équipe
   const parEquipe = equipes.map(eq => {
@@ -932,7 +935,7 @@ async function statsGlobalesTournee() {
     : 0;
 
   return {
-    totalCollecte, totalEspeces, totalCheques,
+    totalCollecte, totalEspeces, totalCheques, totalCarte,
     nbDons, nbRefus, nbAbsents, nbRelances,
     nbPassages: passages.length,
     nbSecteursTermines, nbSecteursTotal, avancement,
@@ -1602,7 +1605,7 @@ async function renderDashboard() {
         <div class="stat-card stat-card--primary">
           <div class="stat-value">${formatMontant(stats.totalCollecte)}</div>
           <div class="stat-label">Total collecté</div>
-          <div class="stat-sub">💵 Espèces : ${formatMontant(stats.totalEspeces)} | 📝 Chèques : ${formatMontant(stats.totalCheques)}</div>
+          <div class="stat-sub">💵 ${formatMontant(stats.totalEspeces)} | 📝 ${formatMontant(stats.totalCheques)} | 💳 ${formatMontant(stats.totalCarte)}</div>
         </div>
         <div class="stat-card">
           <div class="stat-value">${stats.avancement}%</div>
@@ -2206,6 +2209,7 @@ async function renderTerrainPassages() {
           <div class="mode-paiement">
             <button class="mode-btn mode-btn--active" data-mode="especes" onclick="selectMode('especes')">💵 Espèces</button>
             <button class="mode-btn" data-mode="cheque" onclick="selectMode('cheque')">📝 Chèque</button>
+            <button class="mode-btn" data-mode="carte" onclick="selectMode('carte')">💳 Carte</button>
           </div>
           <input id="p-donateur" class="input" placeholder="Nom donateur (optionnel)">
         </div>
@@ -2305,7 +2309,7 @@ async function renderTerrainPassages() {
         <div class="passage-info">
           <span class="passage-adresse">${p.adresse || '(adresse non précisée)'}</span>
           <span class="passage-badge">${STATUT_PASSAGE_LABEL[p.statut] || p.statut}</span>
-          ${p.statut === 'don' ? `<span class="passage-montant">${formatMontant(p.montant)} ${p.modePaiement === 'cheque' ? '📝' : '💵'}</span>` : ''}
+          ${p.statut === 'don' ? `<span class="passage-montant">${formatMontant(p.montant)} ${p.modePaiement === 'cheque' ? '📝' : p.modePaiement === 'carte' ? '💳' : '💵'}</span>` : ''}
         </div>
         <span class="passage-heure">${(p.datePassage || '').slice(11,16)}</span>
       </div>
