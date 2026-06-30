@@ -1050,7 +1050,10 @@ const COMMUNES_INSEE = {
   "Chaignes": "27136",
   "Croisy-sur-Eure": "27190",
   "Villegats": "27689",
-  "Pacy-sur-Eure": "27448"
+  "Pacy-sur-Eure": "27448",
+  "Hardencourt-Cocherel": "27312",
+  "Saint-Aquilin-de-Pacy": "27510",
+  "Gadencourt": "27273"
 };
 
 // Cache des contours GeoJSON déjà récupérés (évite de re-fetch)
@@ -1063,6 +1066,22 @@ const COULEUR_STATUT = {
   en_cours: "#EAB308",
   termine:  "#22C55E"
 };
+
+// Palette de couleurs distinctes pour les équipes (cycle si >12 équipes)
+const PALETTE_EQUIPES = [
+  "#EF4444", "#F97316", "#EAB308", "#22C55E", "#10B981",
+  "#06B6D4", "#3B82F6", "#6366F1", "#8B5CF6", "#D946EF",
+  "#EC4899", "#F43F5E"
+];
+
+// Attribue une couleur stable à chaque équipe (même équipe = même couleur toujours)
+function getCouleurEquipe(equipeId, toutesLesEquipes) {
+  if (!equipeId) return COULEUR_STATUT.libre;
+  const ids = toutesLesEquipes.map(e => e.id).sort(); // ordre stable
+  const idx = ids.indexOf(equipeId);
+  if (idx === -1) return COULEUR_STATUT.libre;
+  return PALETTE_EQUIPES[idx % PALETTE_EQUIPES.length];
+}
 
 // ── Récupérer le contour GeoJSON d'une commune via son code INSEE ──
 async function fetchContourCommune(codeInsee) {
@@ -1115,8 +1134,8 @@ async function initCarte(containerId, options = {}) {
   return map;
 }
 
-// ── Afficher tous les secteurs sur une carte avec couleur selon statut ──
-async function afficherSecteursSurCarte(map, secteurs) {
+// ── Afficher tous les secteurs sur une carte, colorés par équipe affectée ──
+async function afficherSecteursSurCarte(map, secteurs, equipes = []) {
   const layers = [];
   const bounds = [];
 
@@ -1127,14 +1146,16 @@ async function afficherSecteursSurCarte(map, secteurs) {
     const geojson = await fetchContourCommune(codeInsee);
     if (!geojson) continue;
 
-    const couleur = secteur.couleur || COULEUR_STATUT[secteur.statut] || "#9CA3AF";
+    // Couleur = couleur de l'équipe affectée (stable et unique par équipe), sinon gris "libre"
+    const couleur = getCouleurEquipe(secteur.equipeId, equipes);
 
     const layer = L.geoJSON(geojson, {
       style: {
-        color: couleur,
+        color: "#FFFFFF",
         weight: 2,
+        opacity: 0.9,
         fillColor: couleur,
-        fillOpacity: secteur.statut === "termine" ? 0.55 : secteur.statut === "en_cours" ? 0.4 : 0.25
+        fillOpacity: secteur.statut === "termine" ? 0.65 : secteur.statut === "en_cours" ? 0.5 : secteur.equipeId ? 0.4 : 0.25
       }
     });
 
@@ -1532,11 +1553,8 @@ async function renderDashboard() {
     <div class="section-block">
       <h2>Carte des secteurs</h2>
       <div id="dashboard-map" style="height:420px;border-radius:12px;overflow:hidden;"></div>
-      <div class="map-legend">
+      <div id="map-legend" class="map-legend">
         <span><i style="background:#9CA3AF"></i> Non affecté</span>
-        <span><i style="background:#3B82F6"></i> Affecté</span>
-        <span><i style="background:#EAB308"></i> En cours</span>
-        <span><i style="background:#22C55E"></i> Terminé</span>
       </div>
     </div>
   `);
@@ -1548,7 +1566,7 @@ async function renderDashboard() {
 
   async function refreshCarte() {
     if (!dashboardMap) return;
-    const secteurs = await lireSecteurs();
+    const [secteurs, equipes] = await Promise.all([lireSecteurs(), lireEquipes()]);
     // Nettoyer les anciennes couches
     dashboardMap.eachLayer(l => { if (l.options && l.options.attribution === undefined) dashboardMap.removeLayer(l); });
     // Recréer le fond de carte si besoin
@@ -1556,10 +1574,14 @@ async function renderDashboard() {
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(dashboardMap);
       dashboardMap._hasTileLayer = true;
     }
-    await afficherSecteursSurCarte(dashboardMap, secteurs.map(s => ({
-      ...s,
-      couleur: COULEUR_STATUT[s.statut] || s.couleur
-    })));
+    await afficherSecteursSurCarte(dashboardMap, secteurs, equipes);
+
+    // Légende dynamique : une couleur par équipe
+    const legend = document.getElementById("map-legend");
+    if (legend) {
+      legend.innerHTML = `<span><i style="background:#9CA3AF"></i> Non affecté</span>` +
+        equipes.map((eq, i) => `<span><i style="background:${PALETTE_EQUIPES[equipes.map(e=>e.id).sort().indexOf(eq.id) % PALETTE_EQUIPES.length]}"></i> ${eq.nom}</span>`).join('');
+    }
   }
 
   document.getElementById("btn-export")?.addEventListener("click", async () => {
