@@ -489,6 +489,16 @@ body {
   border-radius: 3px; flex-shrink: 0;
 }
 .leaflet-popup-content-wrapper { border-radius: var(--r-md); }
+
+/* ── Badge réseau (hors-ligne) ──────────────────────────────── */
+.network-badge {
+  font-size: .72rem; font-weight: 600;
+  padding: 3px 8px; border-radius: 99px;
+  white-space: nowrap;
+}
+.network-badge--online  { background: rgba(34,197,94,.18); color: #BBF7D0; }
+.network-badge--offline { background: rgba(239,68,68,.25); color: #FECACA; animation: pulse-offline 2s infinite; }
+@keyframes pulse-offline { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
 </style>
 </head>
 <body>
@@ -513,6 +523,9 @@ const FIREBASE_CONFIG = {
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection,
   doc,
   getDoc,
@@ -526,7 +539,9 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  increment
+  increment,
+  enableNetwork,
+  disableNetwork
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import {
   getAuth,
@@ -538,9 +553,23 @@ import {
 
 // Init
 const app  = initializeApp(FIREBASE_CONFIG);
-const db   = getFirestore(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
+
+// Firestore avec cache persistant IndexedDB (mode hors-ligne)
+// Permet lecture/écriture même sans réseau ; synchronisation auto au retour de connexion
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
+} catch (e) {
+  // Fallback si la persistence échoue (navigateur non supporté, mode privé strict...)
+  console.warn("Persistence hors-ligne indisponible, fallback mémoire :", e.message);
+  db = getFirestore(app);
+}
 
 // ── Collections ──────────────────────────────────────────────
 const COLLECTIONS = {
@@ -589,6 +618,24 @@ async function loginPin(pin) {
   const equipes = await fsQuery(COLLECTIONS.EQUIPES, where("pin", "==", pin));
   if (equipes.length === 0) return null;
   return equipes[0];
+}
+
+// ── État réseau (pour badge hors-ligne dans l'UI) ──────────────
+// On combine navigator.onLine (rapide mais imprécis) avec l'état réel
+// du flux réseau du navigateur, mis à jour en continu.
+const _networkListeners = [];
+let _isOnline = navigator.onLine;
+
+window.addEventListener("online",  () => { _isOnline = true;  _networkListeners.forEach(cb => cb(true)); });
+window.addEventListener("offline", () => { _isOnline = false; _networkListeners.forEach(cb => cb(false)); });
+
+function isOnline() { return _isOnline; }
+function onNetworkChange(cb) {
+  _networkListeners.push(cb);
+  return () => {
+    const idx = _networkListeners.indexOf(cb);
+    if (idx > -1) _networkListeners.splice(idx, 1);
+  };
 }
 
 
@@ -1351,6 +1398,24 @@ function setLoading(btn, loading) {
 
 function formatMontant(val) {
   return Number(val || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " €";
+}
+
+// ── Badge état réseau (hors-ligne / synchro) ──────────────────
+function renderNetworkBadge() {
+  return `<span id="network-badge" class="network-badge ${isOnline() ? 'network-badge--online' : 'network-badge--offline'}">${isOnline() ? '🟢 En ligne' : '🔴 Hors-ligne'}</span>`;
+}
+
+function bindNetworkBadge() {
+  const badge = document.getElementById("network-badge");
+  if (!badge) return () => {};
+  return onNetworkChange((online) => {
+    const b = document.getElementById("network-badge");
+    if (!b) return;
+    b.textContent = online ? '🟢 En ligne' : '🔴 Hors-ligne';
+    b.className = `network-badge ${online ? 'network-badge--online' : 'network-badge--offline'}`;
+    if (online) toast("Connexion rétablie — synchronisation en cours…", "success");
+    else toast("Mode hors-ligne — tes saisies seront synchronisées au retour du réseau", "info");
+  });
 }
 
 function stopUnsubs() {
@@ -2304,6 +2369,7 @@ async function renderTerrain() {
       <header class="terrain-header">
         <div class="terrain-brand">🚒 SP Pacy — Tournée Calendriers</div>
         <div class="terrain-equipe">👥 ${APP.equipeNom}</div>
+        ${renderNetworkBadge()}
         <button id="btn-logout-terrain" class="btn btn--ghost btn--sm">Quitter</button>
       </header>
       <div id="terrain-content">
@@ -2311,6 +2377,9 @@ async function renderTerrain() {
       </div>
     </div>
   `;
+
+  const unsubNet = bindNetworkBadge();
+  APP.unsubs.push(unsubNet);
 
   document.getElementById("btn-logout-terrain")?.addEventListener("click", () => {
     sessionStorage.removeItem("equipe");
@@ -2381,6 +2450,7 @@ async function renderTerrainPassages() {
           <div class="terrain-secteur-commune">${secteur.commune}</div>
         </div>
         <span class="badge badge--${secteur.statut}">${STATUT_LABEL[secteur.statut]}</span>
+        ${renderNetworkBadge()}
       </header>
 
       <!-- Mini carte du secteur -->
@@ -2428,6 +2498,9 @@ async function renderTerrainPassages() {
   initCarte("terrain-secteur-map", { zoom: 13, scrollWheelZoom: false }).then(map => {
     afficherSecteurUnique(map, secteur);
   });
+
+  const unsubNet = bindNetworkBadge();
+  APP.unsubs.push(unsubNet);
 
   let statutSelectionne = null;
   let modeSelectionne   = "especes";
