@@ -552,6 +552,44 @@ body {
 .comparaison-montant { display: block; font-size: 1.5rem; font-weight: 700; color: var(--ardoise); }
 .comparaison-ecart { font-size: 1.2rem; font-weight: 700; }
 .comparaison-subtitle { font-size: 1rem; font-weight: 700; margin: var(--sp-5) 0 var(--sp-3); color: var(--ardoise); }
+
+/* ── Gamification — Podium ───────────────────────────────────── */
+.podium-wrap { display:flex; align-items:flex-end; justify-content:center; gap:var(--sp-4); margin-bottom:var(--sp-6); padding:var(--sp-5) var(--sp-4) 0; }
+.podium-place { display:flex; flex-direction:column; align-items:center; flex:1; max-width:200px; }
+.podium-medaille { font-size:2.5rem; line-height:1; margin-bottom:var(--sp-2); }
+.podium-nom { font-size:.85rem; font-weight:700; text-align:center; margin-bottom:4px; color:var(--ardoise); }
+.podium-montant { font-size:1rem; font-weight:700; color:var(--vert); margin-bottom:2px; }
+.podium-pct { font-size:.75rem; color:var(--ardoise-mid); margin-bottom:var(--sp-2); }
+.podium-bloc { width:100%; border-radius:var(--r-md) var(--r-md) 0 0; display:flex; align-items:center; justify-content:center; font-size:1.5rem; font-weight:900; color:rgba(255,255,255,.8); }
+.podium-place--1 .podium-bloc { background:#EAB308; height:80px; }
+.podium-place--2 .podium-bloc { background:#9CA3AF; height:60px; }
+.podium-place--3 .podium-bloc { background:#B45309; height:40px; }
+.ranking-palier { font-size:1.1rem; margin-left:auto; }
+.ranking-badges { display:flex; flex-wrap:wrap; gap:4px; margin-top:var(--sp-2); font-size:1.2rem; }
+.ranking-badges span { cursor:help; }
+.ranking-badges--empty { font-size:.75rem; color:var(--ardoise-mid); font-style:italic; }
+.badges-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:var(--sp-3); }
+.badge-card { background:var(--gris-fond); border-radius:var(--r-md); padding:var(--sp-4); text-align:center; border:1.5px solid var(--ardoise-light); }
+.badge-card-icon { font-size:2rem; margin-bottom:var(--sp-2); }
+.badge-card-nom { font-size:.88rem; font-weight:700; margin-bottom:4px; color:var(--ardoise); }
+.badge-card-desc { font-size:.75rem; color:var(--ardoise-mid); line-height:1.4; }
+/* ── Vue terrain — Barre de progression équipier ─────────────── */
+.terrain-progress-wrap { margin:var(--sp-3) var(--sp-4); background:var(--blanc); border-radius:var(--r-md); padding:var(--sp-3) var(--sp-4); border:1.5px solid var(--gris-bord); }
+.terrain-progress-label { display:flex; justify-content:space-between; font-size:.85rem; font-weight:600; color:var(--ardoise); margin-bottom:var(--sp-2); }
+.terrain-progress-bar { height:10px; background:var(--ardoise-light); border-radius:99px; overflow:hidden; }
+.terrain-progress-fill { height:100%; border-radius:99px; transition:width .5s ease; }
+/* ── Historique ──────────────────────────────────────────────── */
+.comparaison-summary { display:flex; align-items:center; justify-content:space-around; gap:var(--sp-4); padding:var(--sp-5); background:var(--gris-fond); border-radius:var(--r-lg); margin-bottom:var(--sp-5); flex-wrap:wrap; }
+.comparaison-total { text-align:center; }
+.comparaison-annee { display:block; font-size:.85rem; color:var(--ardoise-mid); font-weight:600; margin-bottom:4px; }
+.comparaison-montant { display:block; font-size:1.5rem; font-weight:700; color:var(--ardoise); }
+.comparaison-ecart { font-size:1.2rem; font-weight:700; }
+.comparaison-subtitle { font-size:1rem; font-weight:700; margin:var(--sp-5) 0 var(--sp-3); color:var(--ardoise); }
+/* ── Badge réseau ────────────────────────────────────────────── */
+.network-badge { font-size:.72rem; font-weight:600; padding:3px 8px; border-radius:99px; white-space:nowrap; }
+.network-badge--online  { background:rgba(34,197,94,.18); color:#BBF7D0; }
+.network-badge--offline { background:rgba(239,68,68,.25); color:#FECACA; animation:pulse-offline 2s infinite; }
+@keyframes pulse-offline { 0%,100%{opacity:1} 50%{opacity:.6} }
 </style>
 </head>
 <body>
@@ -572,45 +610,21 @@ const FIREBASE_CONFIG = {
   appId:             "1:767402684897:web:134c456b1de29b2dace2a0"
 };
 
-// Import Firebase SDK v12.15.0 modulaire via CDN ESM
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
 import {
-  getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentSingleTabManager,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  addDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  increment,
-  enableNetwork,
-  disableNetwork
+  getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager,
+  collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
+  query, where, orderBy, onSnapshot, serverTimestamp, increment,
+  enableNetwork, disableNetwork, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import {
-  getAuth,
-  signInWithPopup,
-  GoogleAuthProvider,
-  signOut,
-  onAuthStateChanged
+  getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
-// Init
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-// Firestore avec cache persistant IndexedDB (mode hors-ligne)
-// Single-tab manager : plus robuste sur mobile que multi-tab
 let db;
 try {
   db = initializeFirestore(app, {
@@ -619,11 +633,10 @@ try {
     })
   });
 } catch (e) {
-  console.warn("Persistence hors-ligne indisponible, fallback mémoire :", e?.message || e);
+  console.warn("Persistence hors-ligne indisponible:", e?.message);
   db = getFirestore(app);
 }
 
-// ── Collections ──────────────────────────────────────────────
 const COLLECTIONS = {
   CONFIG:   "config",
   EQUIPES:  "equipes",
@@ -632,15 +645,14 @@ const COLLECTIONS = {
   ADMINS:   "admins"
 };
 
-// ── Helpers Firestore ─────────────────────────────────────────
-const fsCollection = (name)           => collection(db, name);
-const fsDoc        = (path, ...id)    => doc(db, path, ...id);
-const fsAdd        = (col, data)      => addDoc(collection(db, col), { ...data, createdAt: serverTimestamp() });
-const fsSet        = (col, id, data)  => setDoc(doc(db, col, id), { ...data, updatedAt: serverTimestamp() }, { merge: true });
-const fsUpdate     = (col, id, data)  => updateDoc(doc(db, col, id), { ...data, updatedAt: serverTimestamp() });
-const fsDelete     = (col, id)        => deleteDoc(doc(db, col, id));
-const fsGet        = async (col, id)  => { const s = await getDoc(doc(db, col, id)); return s.exists() ? { id: s.id, ...s.data() } : null; };
-const fsGetAll     = async (col)      => { const s = await getDocs(collection(db, col)); return s.docs.map(d => ({ id: d.id, ...d.data() })); };
+const fsCollection = (name)          => collection(db, name);
+const fsDoc        = (path, ...id)   => doc(db, path, ...id);
+const fsAdd        = (col, data)     => addDoc(collection(db, col), { ...data, createdAt: serverTimestamp() });
+const fsSet        = (col, id, data) => setDoc(doc(db, col, id), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+const fsUpdate     = (col, id, data) => updateDoc(doc(db, col, id), { ...data, updatedAt: serverTimestamp() });
+const fsDelete     = (col, id)       => deleteDoc(doc(db, col, id));
+const fsGet        = async (col, id) => { const s = await getDoc(doc(db, col, id)); return s.exists() ? { id: s.id, ...s.data() } : null; };
+const fsGetAll     = async (col)     => { const s = await getDocs(collection(db, col)); return s.docs.map(d => ({ id: d.id, ...d.data() })); };
 const fsQuery      = async (col, ...constraints) => {
   const s = await getDocs(query(collection(db, col), ...constraints));
   return s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -652,624 +664,240 @@ const fsListen     = (col, cb, ...constraints) => {
 const fsListenDoc  = (col, id, cb) =>
   onSnapshot(doc(db, col, id), snap => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null));
 
-// ── Auth Google ───────────────────────────────────────────────
 const loginGoogle      = () => signInWithPopup(auth, googleProvider);
 const getLoginRedirect = () => Promise.resolve(null);
-const logoutGoogle = () => signOut(auth);
-const onAuth       = (cb) => onAuthStateChanged(auth, cb);
+const logoutGoogle     = () => signOut(auth);
+const onAuth           = (cb) => onAuthStateChanged(auth, cb);
 
-// ── Vérification rôle admin ───────────────────────────────────
 async function isAdmin(email) {
   if (!email) return false;
   const snap = await getDoc(doc(db, COLLECTIONS.ADMINS, email));
   return snap.exists();
 }
 
-// ── Auth PIN Amicaliste ─────────────────────────────────────────
 async function loginPin(pin) {
   const equipes = await fsQuery(COLLECTIONS.EQUIPES, where("pin", "==", pin));
   if (equipes.length === 0) return null;
   return equipes[0];
 }
 
-// ── État réseau (pour badge hors-ligne dans l'UI) ──────────────
-// On combine navigator.onLine (rapide mais imprécis) avec l'état réel
-// du flux réseau du navigateur, mis à jour en continu.
 const _networkListeners = [];
 let _isOnline = navigator.onLine;
-
 window.addEventListener("online",  () => { _isOnline = true;  _networkListeners.forEach(cb => cb(true)); });
 window.addEventListener("offline", () => { _isOnline = false; _networkListeners.forEach(cb => cb(false)); });
-
 function isOnline() { return _isOnline; }
 function onNetworkChange(cb) {
   _networkListeners.push(cb);
-  return () => {
-    const idx = _networkListeners.indexOf(cb);
-    if (idx > -1) _networkListeners.splice(idx, 1);
-  };
+  return () => { const idx = _networkListeners.indexOf(cb); if (idx > -1) _networkListeners.splice(idx, 1); };
 }
 
 
-// ============================================================
 // secteurs.js — Gestion des secteurs géographiques
-// Amicale SP Pacy-sur-Eure — Tournée Calendriers
-// ============================================================
 
+const STATUT_SECTEUR = { LIBRE:"libre", AFFECTE:"affecte", EN_COURS:"en_cours", TERMINE:"termine" };
+const STATUT_LABEL   = { libre:"Non affecté", affecte:"Affecté", en_cours:"En cours", termine:"Terminé" };
 
-// ── Statuts possibles d'un secteur ───────────────────────────
-const STATUT_SECTEUR = {
-  LIBRE:      "libre",       // Non affecté
-  AFFECTE:    "affecte",     // Équipe assignée, pas encore commencé
-  EN_COURS:   "en_cours",    // Tournée démarrée
-  TERMINE:    "termine"      // Tous les foyers visités
-};
-
-const STATUT_LABEL = {
-  libre:    "Non affecté",
-  affecte:  "Affecté",
-  en_cours: "En cours",
-  termine:  "Terminé"
-};
-
-// ── Création d'un secteur ─────────────────────────────────────
-async function creerSecteur({ nom, commune, description = "", rues = [], couleur = "#EF4444" }) {
+async function creerSecteur({ nom, commune, description="", rues=[], couleur="#EF4444" }) {
   if (!nom || !commune) throw new Error("Nom et commune obligatoires");
-  return fsAdd(COLLECTIONS.SECTEURS, {
-    nom,
-    commune,
-    description,
-    rues,          // tableau de strings : noms de rues / zones
-    couleur,       // couleur d'affichage sur le tableau de bord
-    statut: STATUT_SECTEUR.LIBRE,
-    equipeId: null,
-    equipNom: null,
-    totalCollecte: 0,
-    nbFoyersVisites: 0,
-    nbFoyersAbsents: 0,
-    nbFoyersTotal: 0,
-    dateDebut: null,
-    dateFin: null
-  });
+  return fsAdd(COLLECTIONS.SECTEURS, { nom, commune, description, rues, couleur, statut:STATUT_SECTEUR.LIBRE, equipeId:null, equipNom:null, totalCollecte:0, nbFoyersVisites:0, nbFoyersAbsents:0, nbFoyersTotal:0, dateDebut:null, dateFin:null });
 }
-
-// ── Mise à jour d'un secteur ──────────────────────────────────
-async function mettreAJourSecteur(secteurId, data) {
-  return fsUpdate(COLLECTIONS.SECTEURS, secteurId, data);
-}
-
-// ── Suppression d'un secteur ──────────────────────────────────
-async function supprimerSecteur(secteurId) {
-  return fsDelete(COLLECTIONS.SECTEURS, secteurId);
-}
-
-// ── Affecter une équipe à un secteur ─────────────────────────
+async function mettreAJourSecteur(id, data) { return fsUpdate(COLLECTIONS.SECTEURS, id, data); }
+async function supprimerSecteur(id) { return fsDelete(COLLECTIONS.SECTEURS, id); }
 async function affecterEquipe(secteurId, equipeId, equipeNom) {
-  return fsUpdate(COLLECTIONS.SECTEURS, secteurId, {
-    equipeId,
-    equipNom: equipeNom,
-    statut: STATUT_SECTEUR.AFFECTE
-  });
+  return fsUpdate(COLLECTIONS.SECTEURS, secteurId, { equipeId, equipNom: equipeNom, statut: STATUT_SECTEUR.AFFECTE });
 }
-
-// ── Désaffecter l'équipe d'un secteur ────────────────────────
 async function desaffecterEquipe(secteurId) {
-  return fsUpdate(COLLECTIONS.SECTEURS, secteurId, {
-    equipeId: null,
-    equipNom: null,
-    statut: STATUT_SECTEUR.LIBRE
-  });
+  return fsUpdate(COLLECTIONS.SECTEURS, secteurId, { equipeId: null, equipNom: null, statut: STATUT_SECTEUR.LIBRE });
 }
-
-// ── Démarrer la tournée d'un secteur ─────────────────────────
-async function demarrerSecteur(secteurId) {
-  return fsUpdate(COLLECTIONS.SECTEURS, secteurId, {
-    statut: STATUT_SECTEUR.EN_COURS,
-    dateDebut: new Date().toISOString()
-  });
-}
-
-// ── Clôturer un secteur ───────────────────────────────────────
-async function cloturerSecteur(secteurId) {
-  return fsUpdate(COLLECTIONS.SECTEURS, secteurId, {
-    statut: STATUT_SECTEUR.TERMINE,
-    dateFin: new Date().toISOString()
-  });
-}
-
-// ── Lecture des secteurs ──────────────────────────────────────
-async function lireSecteurs() {
-  return fsGetAll(COLLECTIONS.SECTEURS);
-}
-
-async function lireSecteur(secteurId) {
-  return fsGet(COLLECTIONS.SECTEURS, secteurId);
-}
-
-async function secteursParEquipe(equipeId) {
-  return fsQuery(COLLECTIONS.SECTEURS, where("equipeId", "==", equipeId));
-}
-
-// ── Écoute temps réel ─────────────────────────────────────────
+async function cloturerSecteur(id) { return fsUpdate(COLLECTIONS.SECTEURS, id, { statut: STATUT_SECTEUR.TERMINE, dateFin: new Date().toISOString() }); }
+async function demarrerSecteur(id) { return fsUpdate(COLLECTIONS.SECTEURS, id, { statut: STATUT_SECTEUR.EN_COURS, dateDebut: new Date().toISOString() }); }
+async function lireSecteurs() { return fsGetAll(COLLECTIONS.SECTEURS); }
+async function lireSecteur(id) { return fsGet(COLLECTIONS.SECTEURS, id); }
 function ecouterSecteurs(callback) {
   return fsListen(COLLECTIONS.SECTEURS, (secteurs) => {
     secteurs.sort((a, b) => (a.commune + a.nom).localeCompare(b.commune + b.nom));
     callback(secteurs);
   });
 }
-
 function ecouterSecteursEquipe(equipeId, callback) {
   return fsListen(COLLECTIONS.SECTEURS, callback, where("equipeId", "==", equipeId));
 }
-
-// ── Recalcul des totaux d'un secteur depuis ses passages ──────
 async function recalculerTotauxSecteur(secteurId) {
-  const passages = await fsQuery(
-    COLLECTIONS.PASSAGES,
-    where("secteurId", "==", secteurId)
-  );
-  let totalCollecte   = 0;
-  let nbFoyersVisites = 0;
-  let nbFoyersAbsents = 0;
-  let nbFoyersTotal   = passages.length;
-
+  const passages = await fsQuery(COLLECTIONS.PASSAGES, where("secteurId", "==", secteurId));
+  let totalCollecte=0, nbFoyersVisites=0, nbFoyersAbsents=0;
   for (const p of passages) {
-    if (p.statut === "don")    { totalCollecte += Number(p.montant || 0); nbFoyersVisites++; }
-    if (p.statut === "refuse") { nbFoyersVisites++; }
-    if (p.statut === "absent") { nbFoyersAbsents++; }
+    if (p.statut==="don")    { totalCollecte += Number(p.montant||0); nbFoyersVisites++; }
+    if (p.statut==="refuse") { nbFoyersVisites++; }
+    if (p.statut==="absent") { nbFoyersAbsents++; }
   }
-
-  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, {
-    totalCollecte,
-    nbFoyersVisites,
-    nbFoyersAbsents,
-    nbFoyersTotal
-  });
-  return { totalCollecte, nbFoyersVisites, nbFoyersAbsents, nbFoyersTotal };
+  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, { totalCollecte, nbFoyersVisites, nbFoyersAbsents, nbFoyersTotal: passages.length });
+  return { totalCollecte, nbFoyersVisites, nbFoyersAbsents, nbFoyersTotal: passages.length };
 }
-
-// ── Stats globales ────────────────────────────────────────────
 async function statsGlobales() {
   const secteurs = await lireSecteurs();
   return {
-    total:    secteurs.length,
-    libre:    secteurs.filter(s => s.statut === STATUT_SECTEUR.LIBRE).length,
-    affecte:  secteurs.filter(s => s.statut === STATUT_SECTEUR.AFFECTE).length,
-    en_cours: secteurs.filter(s => s.statut === STATUT_SECTEUR.EN_COURS).length,
-    termine:  secteurs.filter(s => s.statut === STATUT_SECTEUR.TERMINE).length,
-    totalCollecte: secteurs.reduce((sum, s) => sum + (s.totalCollecte || 0), 0)
+    total: secteurs.length,
+    libre: secteurs.filter(s=>s.statut===STATUT_SECTEUR.LIBRE).length,
+    affecte: secteurs.filter(s=>s.statut===STATUT_SECTEUR.AFFECTE).length,
+    en_cours: secteurs.filter(s=>s.statut===STATUT_SECTEUR.EN_COURS).length,
+    termine: secteurs.filter(s=>s.statut===STATUT_SECTEUR.TERMINE).length,
+    totalCollecte: secteurs.reduce((sum, s) => sum + (s.totalCollecte||0), 0)
   };
 }
 
-// ============================================================
 // tournee.js — Logique métier tournée calendriers
-// Amicale SP Pacy-sur-Eure — Tournée Calendriers
-// ============================================================
 
+const STATUT_PASSAGE = { DON:"don", REFUSE:"refuse", ABSENT:"absent", RELANCE:"relance" };
+const STATUT_PASSAGE_LABEL = { don:"Don collecté", refuse:"A refusé", absent:"Absent", relance:"À relancer" };
+const MODE_PAIEMENT = { ESPECES:"especes", CHEQUE:"cheque", CARTE:"carte" };
 
-// ── Statuts de passage foyer ──────────────────────────────────
-const STATUT_PASSAGE = {
-  DON:     "don",      // Don remis (espèces ou chèque)
-  REFUSE:  "refuse",   // Présent mais refuse
-  ABSENT:  "absent",   // Absent, à relancer éventuellement
-  RELANCE: "relance"   // Absent, marqué à relancer
-};
-
-const STATUT_PASSAGE_LABEL = {
-  don:     "Don collecté",
-  refuse:  "A refusé",
-  absent:  "Absent",
-  relance: "À relancer"
-};
-
-const MODE_PAIEMENT = {
-  ESPECES: "especes",
-  CHEQUE:  "cheque",
-  CARTE:   "carte"
-};
-
-// ════════════════════════════════════════════════════════════
-//  ÉQUIPES
-// ════════════════════════════════════════════════════════════
-
-async function creerEquipe({ nom, membres = [], pin }) {
-  if (!nom)      throw new Error("Nom d'équipe obligatoire");
+async function creerEquipe({ nom, membres=[], pin }) {
+  if (!nom) throw new Error("Nom d'équipe obligatoire");
   if (!pin || !/^\d{4}$/.test(pin)) throw new Error("PIN doit être 4 chiffres");
-
-  // Vérifier unicité du PIN
-  const existants = await fsQuery(COLLECTIONS.EQUIPES, where("pin", "==", pin));
-  if (existants.length > 0) throw new Error("Ce PIN est déjà utilisé par une autre équipe");
-
-  return fsAdd(COLLECTIONS.EQUIPES, { nom, membres, pin, actif: true });
+  const existants = await fsQuery(COLLECTIONS.EQUIPES, where("pin","==",pin));
+  if (existants.length > 0) throw new Error("Ce PIN est déjà utilisé");
+  return fsAdd(COLLECTIONS.EQUIPES, { nom, membres, pin, actif:true });
 }
-
 async function mettreAJourEquipe(equipeId, data) {
   if (data.pin && !/^\d{4}$/.test(data.pin)) throw new Error("PIN doit être 4 chiffres");
   if (data.pin) {
-    const existants = await fsQuery(COLLECTIONS.EQUIPES, where("pin", "==", data.pin));
-    if (existants.some(e => e.id !== equipeId)) throw new Error("Ce PIN est déjà utilisé");
+    const existants = await fsQuery(COLLECTIONS.EQUIPES, where("pin","==",data.pin));
+    if (existants.some(e=>e.id!==equipeId)) throw new Error("Ce PIN est déjà utilisé");
   }
   return fsUpdate(COLLECTIONS.EQUIPES, equipeId, data);
 }
-
-async function supprimerEquipe(equipeId) {
-  return fsDelete(COLLECTIONS.EQUIPES, equipeId);
-}
-
-async function lireEquipes() {
-  return fsGetAll(COLLECTIONS.EQUIPES);
-}
-
-async function lireEquipe(equipeId) {
-  return fsGet(COLLECTIONS.EQUIPES, equipeId);
-}
-
+async function supprimerEquipe(id) { return fsDelete(COLLECTIONS.EQUIPES, id); }
+async function lireEquipes() { return fsGetAll(COLLECTIONS.EQUIPES); }
+async function lireEquipe(id) { return fsGet(COLLECTIONS.EQUIPES, id); }
 function ecouterEquipes(callback) {
   return fsListen(COLLECTIONS.EQUIPES, (equipes) => {
-    equipes.sort((a, b) => a.nom.localeCompare(b.nom));
+    equipes.sort((a,b)=>a.nom.localeCompare(b.nom));
     callback(equipes);
   });
 }
 
-// ════════════════════════════════════════════════════════════
-//  PASSAGES
-// ════════════════════════════════════════════════════════════
-
-async function ajouterPassage({
-  secteurId, equipeId, equipeNom,
-  adresse, statut, montant = 0,
-  modePaiement = null, nomDonateur = "", note = ""
-}) {
-  if (!secteurId || !equipeId) throw new Error("secteurId et equipeId obligatoires");
+async function ajouterPassage({ secteurId, equipeId, equipeNom, adresse, statut, montant=0, modePaiement=null, nomDonateur="", note="" }) {
+  if (!secteurId||!equipeId) throw new Error("secteurId et equipeId obligatoires");
   if (!Object.values(STATUT_PASSAGE).includes(statut)) throw new Error("Statut invalide");
-  if (statut === STATUT_PASSAGE.DON && montant <= 0) throw new Error("Montant requis pour un don");
-
+  if (statut===STATUT_PASSAGE.DON && montant<=0) throw new Error("Montant requis pour un don");
   const passage = await fsAdd(COLLECTIONS.PASSAGES, {
-    secteurId,
-    equipeId,
-    equipeNom,
-    adresse: adresse || "",
-    statut,
-    montant: statut === STATUT_PASSAGE.DON ? Number(montant) : 0,
-    modePaiement: statut === STATUT_PASSAGE.DON ? modePaiement : null,
-    nomDonateur,
-    note,
-    aRelancer: statut === STATUT_PASSAGE.ABSENT,
-    datePassage: new Date().toISOString()
+    secteurId, equipeId, equipeNom, adresse:adresse||"", statut,
+    montant: statut===STATUT_PASSAGE.DON ? Number(montant) : 0,
+    modePaiement: statut===STATUT_PASSAGE.DON ? modePaiement : null,
+    nomDonateur, note, aRelancer: statut===STATUT_PASSAGE.ABSENT, datePassage: new Date().toISOString()
   });
-
-  // Recalcul automatique des totaux du secteur
   await recalculerTotauxSecteur(secteurId);
   return passage;
 }
-
-async function modifierPassage(passageId, data) {
-  await fsUpdate(COLLECTIONS.PASSAGES, passageId, data);
-  if (data.secteurId) await recalculerTotauxSecteur(data.secteurId);
+async function marquerRelance(passageId, secteurId) {
+  await fsUpdate(COLLECTIONS.PASSAGES, passageId, { aRelancer:true, statut:STATUT_PASSAGE.RELANCE });
+  await recalculerTotauxSecteur(secteurId);
 }
-
 async function supprimerPassage(passageId, secteurId) {
   await fsDelete(COLLECTIONS.PASSAGES, passageId);
   await recalculerTotauxSecteur(secteurId);
 }
-
-// ── Marquer un absent comme "à relancer" ─────────────────────
-async function marquerRelance(passageId, secteurId) {
-  await fsUpdate(COLLECTIONS.PASSAGES, passageId, {
-    aRelancer: true,
-    statut: STATUT_PASSAGE.RELANCE
-  });
-  await recalculerTotauxSecteur(secteurId);
-}
-
-// ── Passages d'un secteur ─────────────────────────────────────
 async function passagesDuSecteur(secteurId) {
-  const passages = await fsQuery(COLLECTIONS.PASSAGES, where("secteurId", "==", secteurId));
-  return passages.sort((a, b) => (a.datePassage || "").localeCompare(b.datePassage || ""));
+  const passages = await fsQuery(COLLECTIONS.PASSAGES, where("secteurId","==",secteurId));
+  return passages.sort((a,b)=>(a.datePassage||"").localeCompare(b.datePassage||""));
 }
-
-// ── Passages d'une équipe ─────────────────────────────────────
 async function passagesDeLEquipe(equipeId) {
-  const passages = await fsQuery(COLLECTIONS.PASSAGES, where("equipeId", "==", equipeId));
-  return passages.sort((a, b) => (a.datePassage || "").localeCompare(b.datePassage || ""));
+  const passages = await fsQuery(COLLECTIONS.PASSAGES, where("equipeId","==",equipeId));
+  return passages.sort((a,b)=>(a.datePassage||"").localeCompare(b.datePassage||""));
 }
-
-// ── Foyers à relancer ─────────────────────────────────────────
-async function foyersARelancer() {
-  return fsQuery(COLLECTIONS.PASSAGES, where("aRelancer", "==", true));
-}
-
-// ── Écoute temps réel passages d'un secteur ──────────────────
+async function foyersARelancer() { return fsQuery(COLLECTIONS.PASSAGES, where("aRelancer","==",true)); }
 function ecouterPassagesSecteur(secteurId, callback) {
-  return fsListen(
-    COLLECTIONS.PASSAGES,
-    (passages) => {
-      passages.sort((a, b) => (b.datePassage || "").localeCompare(a.datePassage || ""));
-      callback(passages);
-    },
-    where("secteurId", "==", secteurId)
-  );
+  return fsListen(COLLECTIONS.PASSAGES, (passages) => {
+    passages.sort((a,b)=>(b.datePassage||"").localeCompare(a.datePassage||""));
+    callback(passages);
+  }, where("secteurId","==",secteurId));
 }
-
-// ════════════════════════════════════════════════════════════
-//  STATISTIQUES
-// ════════════════════════════════════════════════════════════
 
 async function statsGlobalesTournee() {
   const [passages, equipes, secteurs] = await Promise.all([
-    fsGetAll(COLLECTIONS.PASSAGES),
-    fsGetAll(COLLECTIONS.EQUIPES),
-    fsGetAll(COLLECTIONS.SECTEURS)
+    fsGetAll(COLLECTIONS.PASSAGES), fsGetAll(COLLECTIONS.EQUIPES), fsGetAll(COLLECTIONS.SECTEURS)
   ]);
-
-  let totalEspeces = 0;
-  let totalCheques = 0;
-  let totalCarte   = 0;
-  let nbDons       = 0;
-  let nbRefus      = 0;
-  let nbAbsents    = 0;
-  let nbRelances   = 0;
-
+  let totalEspeces=0, totalCheques=0, totalCarte=0, nbDons=0, nbRefus=0, nbAbsents=0, nbRelances=0;
   for (const p of passages) {
-    if (p.statut === "don") {
-      nbDons++;
-      if (p.modePaiement === "especes") totalEspeces += Number(p.montant || 0);
-      else if (p.modePaiement === "cheque") totalCheques += Number(p.montant || 0);
-      else if (p.modePaiement === "carte") totalCarte += Number(p.montant || 0);
-    }
-    if (p.statut === "refuse")  nbRefus++;
-    if (p.statut === "absent")  nbAbsents++;
-    if (p.statut === "relance") nbRelances++;
+    if (p.statut==="don") { nbDons++; if(p.modePaiement==="especes") totalEspeces+=Number(p.montant||0); else if(p.modePaiement==="cheque") totalCheques+=Number(p.montant||0); else if(p.modePaiement==="carte") totalCarte+=Number(p.montant||0); }
+    if (p.statut==="refuse") nbRefus++;
+    if (p.statut==="absent") nbAbsents++;
+    if (p.statut==="relance") nbRelances++;
   }
-
   const totalCollecte = totalEspeces + totalCheques + totalCarte;
-
-  // Par équipe
   const parEquipe = equipes.map(eq => {
-    const eqPassages = passages.filter(p => p.equipeId === eq.id);
-    const montant = eqPassages
-      .filter(p => p.statut === "don")
-      .reduce((s, p) => s + Number(p.montant || 0), 0);
-    return { ...eq, montant, nbPassages: eqPassages.length };
-  }).sort((a, b) => b.montant - a.montant);
-
-  const nbSecteursTermines = secteurs.filter(s => s.statut === "termine").length;
-  const nbSecteursTotal    = secteurs.length;
-  const avancement         = nbSecteursTotal > 0
-    ? Math.round((nbSecteursTermines / nbSecteursTotal) * 100)
-    : 0;
-
-  return {
-    totalCollecte, totalEspeces, totalCheques, totalCarte,
-    nbDons, nbRefus, nbAbsents, nbRelances,
-    nbPassages: passages.length,
-    nbSecteursTermines, nbSecteursTotal, avancement,
-    parEquipe
-  };
+    const eqPassages = passages.filter(p=>p.equipeId===eq.id);
+    const montant = eqPassages.filter(p=>p.statut==="don").reduce((s,p)=>s+Number(p.montant||0),0);
+    const nbRefusEq = eqPassages.filter(p=>p.statut==="refuse").length;
+    return { ...eq, montant, nbPassages:eqPassages.length, nbRefus:nbRefusEq };
+  }).sort((a,b)=>b.montant-a.montant);
+  const nbSecteursTermines = secteurs.filter(s=>s.statut==="termine").length;
+  const nbSecteursTotal = secteurs.length;
+  const avancement = nbSecteursTotal>0 ? Math.round((nbSecteursTermines/nbSecteursTotal)*100) : 0;
+  return { totalCollecte, totalEspeces, totalCheques, totalCarte, nbDons, nbRefus, nbAbsents, nbRelances, nbPassages:passages.length, nbSecteursTermines, nbSecteursTotal, avancement, parEquipe };
 }
 
-// ════════════════════════════════════════════════════════════
-//  CONFIG TOURNÉE
-// ════════════════════════════════════════════════════════════
-
-async function lireConfig() {
-  return fsGet(COLLECTIONS.CONFIG, "tournee");
-}
-
-async function sauvegarderConfig(data) {
-  return fsSet(COLLECTIONS.CONFIG, "tournee", data);
-}
-
-// ════════════════════════════════════════════════════════════
-//  EXPORT BILAN CSV
-// ════════════════════════════════════════════════════════════
+async function lireConfig() { return fsGet(COLLECTIONS.CONFIG, "tournee"); }
+async function sauvegarderConfig(data) { return fsSet(COLLECTIONS.CONFIG, "tournee", data); }
 
 async function exporterBilanCSV() {
-  const [passages, secteurs, equipes] = await Promise.all([
-    fsGetAll(COLLECTIONS.PASSAGES),
-    fsGetAll(COLLECTIONS.SECTEURS),
-    fsGetAll(COLLECTIONS.EQUIPES)
-  ]);
-
-  const secteurMap = Object.fromEntries(secteurs.map(s => [s.id, s]));
-  const equipeMap  = Object.fromEntries(equipes.map(e => [e.id, e]));
-
-  // Bilan par secteur
-  let csv = "BILAN PAR SECTEUR\n";
-  csv += "Secteur;Commune;Équipe;Statut;Total collecté (€);Foyers visités;Absents\n";
-  for (const s of secteurs) {
-    csv += `"${s.nom}";"${s.commune}";"${s.equipNom || '-'}";"${s.statut}";"${(s.totalCollecte || 0).toFixed(2)}";"${s.nbFoyersVisites || 0}";"${s.nbFoyersAbsents || 0}"\n`;
-  }
-
-  csv += "\n\nBILAN PAR ÉQUIPE\n";
-  csv += "Équipe;Membres;Montant collecté (€);Nb passages\n";
+  const [passages, secteurs, equipes] = await Promise.all([fsGetAll(COLLECTIONS.PASSAGES), fsGetAll(COLLECTIONS.SECTEURS), fsGetAll(COLLECTIONS.EQUIPES)]);
+  const secteurMap = Object.fromEntries(secteurs.map(s=>[s.id,s]));
+  let csv = "BILAN PAR SECTEUR\nSecteur;Commune;Équipe;Statut;Total collecté (€);Foyers visités;Absents\n";
+  for (const s of secteurs) csv += `"${s.nom}";"${s.commune}";"${s.equipNom||'-'}";"${s.statut}";"${(s.totalCollecte||0).toFixed(2)}";"${s.nbFoyersVisites||0}";"${s.nbFoyersAbsents||0}"\n`;
+  csv += "\n\nBILAN PAR ÉQUIPE\nÉquipe;Membres;Montant collecté (€);Nb passages\n";
   for (const e of equipes) {
-    const eqPassages = passages.filter(p => p.equipeId === e.id);
-    const montant    = eqPassages.filter(p => p.statut === "don").reduce((s, p) => s + Number(p.montant || 0), 0);
-    csv += `"${e.nom}";"${(e.membres || []).join(', ')}";"${montant.toFixed(2)}";"${eqPassages.length}"\n`;
+    const eqP = passages.filter(p=>p.equipeId===e.id);
+    const montant = eqP.filter(p=>p.statut==="don").reduce((s,p)=>s+Number(p.montant||0),0);
+    csv += `"${e.nom}";"${(e.membres||[]).join(', ')}";"${montant.toFixed(2)}";"${eqP.length}"\n`;
   }
-
-  csv += "\n\nDÉTAIL DES PASSAGES\n";
-  csv += "Date;Équipe;Secteur;Commune;Adresse;Statut;Mode paiement;Montant (€);Nom donateur;Note\n";
-  const sorted = [...passages].sort((a, b) => (a.datePassage || "").localeCompare(b.datePassage || ""));
+  csv += "\n\nDÉTAIL DES PASSAGES\nDate;Équipe;Secteur;Commune;Adresse;Statut;Mode paiement;Montant (€);Nom donateur;Note\n";
+  const sorted = [...passages].sort((a,b)=>(a.datePassage||"").localeCompare(b.datePassage||""));
   for (const p of sorted) {
-    const s = secteurMap[p.secteurId] || {};
-    csv += `"${(p.datePassage || "").slice(0, 10)}";"${p.equipeNom || ''}";"${s.nom || ''}";"${s.commune || ''}";"${p.adresse || ''}";"${p.statut}";"${p.modePaiement || ''}";"${p.montant ? Number(p.montant).toFixed(2) : '0.00'}";"${p.nomDonateur || ''}";"${p.note || ''}"\n`;
+    const s = secteurMap[p.secteurId]||{};
+    csv += `"${(p.datePassage||"").slice(0,10)}";"${p.equipeNom||''}";"${s.nom||''}";"${s.commune||''}";"${p.adresse||''}";"${p.statut}";"${p.modePaiement||''}";"${p.montant?Number(p.montant).toFixed(2):'0.00'}";"${p.nomDonateur||''}";"${p.note||''}"\n`;
   }
-
-  csv += "\n\nFOYERS À RELANCER\n";
-  csv += "Équipe;Secteur;Commune;Adresse;Note\n";
-  for (const p of passages.filter(p => p.aRelancer)) {
-    const s = secteurMap[p.secteurId] || {};
-    csv += `"${p.equipeNom || ''}";"${s.nom || ''}";"${s.commune || ''}";"${p.adresse || ''}";"${p.note || ''}"\n`;
+  csv += "\n\nFOYERS À RELANCER\nÉquipe;Secteur;Commune;Adresse;Note\n";
+  for (const p of passages.filter(p=>p.aRelancer)) {
+    const s = secteurMap[p.secteurId]||{};
+    csv += `"${p.equipeNom||''}";"${s.nom||''}";"${s.commune||''}";"${p.adresse||''}";"${p.note||''}"\n`;
   }
-
   return csv;
 }
-
-// ── Télécharger le CSV ────────────────────────────────────────
-function telechargerCSV(csv, filename = "bilan-tournee-calendriers.csv") {
-  const bom = "\uFEFF"; // BOM UTF-8 pour Excel
-  const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function telechargerCSV(csv, filename="bilan-tournee-calendriers.csv") {
+  const bom = "\uFEFF";
+  const blob = new Blob([bom+csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-// ============================================================
-// carte.js — Carte Leaflet avec contours communes (geo.api.gouv.fr)
-// Amicale SP Pacy-sur-Eure — Tournée Calendriers
-// ============================================================
-
-// Mapping nom de commune (tel que saisi dans secteurs.commune) → code INSEE
+// carte.js — Carte Leaflet avec contours communes
 const COMMUNES_INSEE = {
-  "Chambray": "27140",
-  "Rouvray": "27501",
-  "Houlbec-Cocherel": "27343",
-  "Ménilles": "27397",
-  "Menilles": "27397",
-  "Douains": "27203",
-  "Saint-Vincent-des-Bois": "27612",
-  "La Heunière": "27336",
-  "La Heuniere": "27336",
-  "Caillouet-Orgeville": "27123",
-  "Boncourt": "27081",
-  "Vaux-sur-Eure": "27674",
-  "Jouy-sur-Eure": "27358",
-  "Fontaine-sous-Jouy": "27254",
-  "Le Plessis-Hébert": "27465",
-  "Le Plessis-Hebert": "27465",
-  "Le Cormier": "27171",
-  "Boisset-les-Prévanches": "27076",
-  "Boisset-les-Prevanches": "27076",
-  "Mérey": "27400",
-  "Merey": "27400",
-  "Fains": "27231",
-  "Hécourt": "27326",
-  "Hecourt": "27326",
-  "Breuilpont": "27114",
-  "Neuilly": "27429",
-  "Aigleville": "27004",
-  "Chaignes": "27136",
-  "Croisy-sur-Eure": "27190",
-  "Villegats": "27689",
-  "Pacy-sur-Eure": "27448",
-  "Hardencourt-Cocherel": "27312",
-  "Saint-Aquilin-de-Pacy": "27510",
-  "Gadencourt": "27273"
+  "Chambray":"27140","Rouvray":"27501","Houlbec-Cocherel":"27343","Ménilles":"27397","Menilles":"27397",
+  "Douains":"27203","Saint-Vincent-des-Bois":"27612","La Heunière":"27336","La Heuniere":"27336",
+  "Caillouet-Orgeville":"27123","Boncourt":"27081","Vaux-sur-Eure":"27674","Jouy-sur-Eure":"27358",
+  "Fontaine-sous-Jouy":"27254","Le Plessis-Hébert":"27465","Le Plessis-Hebert":"27465",
+  "Le Cormier":"27171","Boisset-les-Prévanches":"27076","Boisset-les-Prevanches":"27076",
+  "Mérey":"27400","Merey":"27400","Fains":"27231","Hécourt":"27326","Hecourt":"27326",
+  "Breuilpont":"27114","Neuilly":"27429","Aigleville":"27004","Chaignes":"27136",
+  "Croisy-sur-Eure":"27190","Villegats":"27689","Pacy-sur-Eure":"27448",
+  "Hardencourt-Cocherel":"27312","Saint-Aquilin-de-Pacy":"27448","Gadencourt":"27273"
 };
-
-// Cache des contours GeoJSON déjà récupérés (évite de re-fetch)
-const _contourCache = {};
-
-// Couleurs par statut de secteur
-const COULEUR_STATUT = {
-  libre:    "#9CA3AF",
-  affecte:  "#3B82F6",
-  en_cours: "#EAB308",
-  termine:  "#22C55E"
-};
-
-// Palette de couleurs distinctes pour les équipes (cycle si >12 équipes)
+const COULEUR_STATUT = { libre:"#9CA3AF", affecte:"#3B82F6", en_cours:"#EAB308", termine:"#22C55E" };
 const PALETTE_EQUIPES = [
-  "#EF4444", "#F97316", "#EAB308", "#84CC16", "#22C55E",
-  "#10B981", "#14B8A6", "#06B6D4", "#0EA5E9", "#3B82F6",
-  "#6366F1", "#8B5CF6", "#A855F7", "#D946EF", "#EC4899",
-  "#F43F5E", "#B91C1C", "#C2410C", "#A16207", "#4D7C0F",
-  "#15803D", "#047857", "#0F766E", "#0E7490", "#0369A1",
-  "#1D4ED8", "#4338CA", "#6D28D9", "#7E22CE", "#A21CAF",
-  "#BE185D", "#9F1239", "#7C2D12", "#854D0E", "#3F6212",
-  "#166534", "#065F46", "#155E75", "#1E3A8A", "#312E81"
+  "#EF4444","#F97316","#EAB308","#84CC16","#22C55E","#10B981","#14B8A6","#06B6D4","#0EA5E9","#3B82F6",
+  "#6366F1","#8B5CF6","#A855F7","#D946EF","#EC4899","#F43F5E","#B91C1C","#C2410C","#A16207","#4D7C0F",
+  "#15803D","#047857","#0F766E","#0E7490","#0369A1","#1D4ED8","#4338CA","#6D28D9","#7E22CE","#A21CAF",
+  "#BE185D","#9F1239","#7C2D12","#854D0E","#3F6212","#166534","#065F46","#155E75","#1E3A8A","#312E81"
 ];
-
-// Attribue une couleur stable à chaque équipe (même équipe = même couleur toujours)
 function getCouleurEquipe(equipeId, toutesLesEquipes) {
   if (!equipeId) return COULEUR_STATUT.libre;
-  const ids = toutesLesEquipes.map(e => e.id).sort(); // ordre stable
+  const ids = toutesLesEquipes.map(e=>e.id).sort();
   const idx = ids.indexOf(equipeId);
-  if (idx === -1) return COULEUR_STATUT.libre;
-  return PALETTE_EQUIPES[idx % PALETTE_EQUIPES.length];
+  return PALETTE_EQUIPES[idx%PALETTE_EQUIPES.length];
 }
-
-// ── Charger dynamiquement Turf.js (calcul géométrique : enveloppe convexe) ──
-let _turfLoading = null;
-function chargerTurf() {
-  if (window.turf) return Promise.resolve();
-  if (_turfLoading) return _turfLoading;
-  _turfLoading = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Impossible de charger Turf.js"));
-    document.head.appendChild(script);
-  });
-  return _turfLoading;
-}
-
-// Cache des géocodages de rues (évite de re-fetch la même rue)
-const _geocodeCache = {};
-
-// ── Géocoder une rue dans une commune via l'API Adresse BAN ──
-async function geocoderRue(rue, commune) {
-  const cacheKey = `${rue}|${commune}`;
-  if (_geocodeCache[cacheKey] !== undefined) return _geocodeCache[cacheKey];
-  try {
-    const q = encodeURIComponent(`${rue} ${commune}`);
-    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${q}&limit=1`);
-    if (!res.ok) { _geocodeCache[cacheKey] = null; return null; }
-    const data = await res.json();
-    const feature = data.features?.[0];
-    const coords = feature ? feature.geometry.coordinates : null; // [lon, lat]
-    _geocodeCache[cacheKey] = coords;
-    return coords;
-  } catch (e) {
-    console.warn("Erreur géocodage", rue, commune, e);
-    _geocodeCache[cacheKey] = null;
-    return null;
-  }
-}
-
-// ── Calculer un polygone approximatif (enveloppe convexe) à partir des rues d'un secteur ──
-// Retourne un GeoJSON Polygon, ou null si pas assez de points pour former une zone
-async function calculerZoneApproximative(rues, commune) {
-  if (!rues || rues.length === 0) return null;
-  await chargerTurf();
-
-  const points = [];
-  for (const rue of rues) {
-    const coords = await geocoderRue(rue, commune);
-    if (coords) points.push(coords);
-  }
-
-  if (points.length < 3) {
-    // Pas assez de points pour un polygone : on fait un petit cercle autour du seul point dispo
-    if (points.length > 0) {
-      try {
-        const circle = turf.circle(points[0], 0.3, { units: "kilometers", steps: 24 });
-        return circle; // déjà un Feature complet
-      } catch (e) { return null; }
-    }
-    return null;
-  }
-
-  try {
-    const fc = turf.featureCollection(points.map(p => turf.point(p)));
-    const hull = turf.convex(fc);
-    if (!hull) return null;
-    // Légère expansion (buffer) pour que la zone ne soit pas trop "collée" aux points
-    return turf.buffer(hull, 0.15, { units: "kilometers" }) || hull; // Feature complet
-  } catch (e) {
-    console.warn("Erreur calcul enveloppe convexe", e);
-    return null;
-  }
-}
-
-// ── Récupérer le contour GeoJSON d'une commune via son code INSEE ──
+const _contourCache = {};
 async function fetchContourCommune(codeInsee) {
   if (_contourCache[codeInsee]) return _contourCache[codeInsee];
   try {
@@ -1278,339 +906,151 @@ async function fetchContourCommune(codeInsee) {
     const geojson = await res.json();
     _contourCache[codeInsee] = geojson;
     return geojson;
-  } catch (e) {
-    console.warn("Erreur fetch contour", codeInsee, e);
-    return null;
-  }
+  } catch(e) { return null; }
 }
-
-// ── Charger dynamiquement Leaflet (CSS + JS) si pas déjà fait ──
-let _leafletLoading = null;
+let _leafletLoading=null;
 function chargerLeaflet() {
   if (window.L) return Promise.resolve();
   if (_leafletLoading) return _leafletLoading;
-
-  _leafletLoading = new Promise((resolve, reject) => {
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
-    document.head.appendChild(css);
-
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Impossible de charger Leaflet"));
-    document.head.appendChild(script);
+  _leafletLoading = new Promise((res,rej)=>{
+    const css=document.createElement("link"); css.rel="stylesheet"; css.href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(css);
+    const s=document.createElement("script"); s.src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"; s.onload=()=>res(); s.onerror=()=>rej(new Error("Leaflet indisponible")); document.head.appendChild(s);
   });
   return _leafletLoading;
 }
-
-// ── Initialiser une carte Leaflet dans un conteneur ──
-async function initCarte(containerId, options = {}) {
+async function initCarte(containerId, options={}) {
   await chargerLeaflet();
-  const map = L.map(containerId, {
-    center: options.center || [49.029, 1.398], // Pacy-sur-Eure approx
-    zoom: options.zoom || 11,
-    scrollWheelZoom: options.scrollWheelZoom !== false
-  });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors',
-    maxZoom: 19
-  }).addTo(map);
+  const map = L.map(containerId, { center:options.center||[49.029,1.398], zoom:options.zoom||11, scrollWheelZoom:options.scrollWheelZoom!==false });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap contributors', maxZoom:19 }).addTo(map);
   return map;
 }
-
-// ── Afficher tous les secteurs sur une carte, colorés par équipe affectée ──
-async function afficherSecteursSurCarte(map, secteurs, equipes = []) {
-  const layers = [];
-  const bounds = [];
-
+async function afficherSecteursSurCarte(map, secteurs, equipes=[]) {
+  const layers=[], bounds=[];
   for (const secteur of secteurs) {
-    const codeInsee = COMMUNES_INSEE[secteur.commune];
-    if (!codeInsee) continue;
-
-    // Si le secteur a des rues précisées, on tente une zone approximative par géocodage
-    // Sinon (ou en cas d'échec), on retombe sur le contour complet de la commune
-    let geojson = null;
-    if (secteur.rues && secteur.rues.length > 0) {
-      geojson = await calculerZoneApproximative(secteur.rues, secteur.commune);
-    }
-    if (!geojson) {
-      geojson = await fetchContourCommune(codeInsee);
-    }
-    if (!geojson) continue;
-
-    // Couleur = couleur de l'équipe affectée (stable et unique par équipe), sinon gris "libre"
-    const couleur = getCouleurEquipe(secteur.equipeId, equipes);
-
-    const layer = L.geoJSON(geojson, {
-      style: {
-        color: "#FFFFFF",
-        weight: 2,
-        opacity: 0.9,
-        fillColor: couleur,
-        fillOpacity: secteur.statut === "termine" ? 0.65 : secteur.statut === "en_cours" ? 0.5 : secteur.equipeId ? 0.4 : 0.25
-      }
-    });
-
-    const popupContent = `
-      <div style="font-family:Inter,sans-serif;min-width:160px;">
-        <strong style="font-size:13px;">${secteur.nom}</strong><br>
-        <span style="font-size:12px;color:#666;">${secteur.commune}</span><br>
-        <span style="font-size:12px;">👥 ${secteur.equipNom || 'Non affecté'}</span><br>
-        <span style="font-size:12px;font-weight:700;color:#16A34A;">${Number(secteur.totalCollecte || 0).toLocaleString('fr-FR')} €</span>
-      </div>
-    `;
-    layer.bindPopup(popupContent);
-    layer.addTo(map);
-    layers.push(layer);
-
-    const b = layer.getBounds();
-    if (b.isValid()) bounds.push(b);
+    const codeInsee=COMMUNES_INSEE[secteur.commune]; if(!codeInsee) continue;
+    const geojson=await fetchContourCommune(codeInsee); if(!geojson) continue;
+    const couleur=getCouleurEquipe(secteur.equipeId,equipes);
+    const layer=L.geoJSON(geojson,{ style:{ color:"#FFFFFF", weight:2, opacity:0.9, fillColor:couleur, fillOpacity:secteur.statut==="termine"?0.65:secteur.statut==="en_cours"?0.5:secteur.equipeId?0.4:0.15 } });
+    layer.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:160px;"><strong>${secteur.nom}</strong><br><span style="color:#666">${secteur.commune}</span><br>👥 ${secteur.equipNom||'Non affecté'}<br><strong style="color:#16A34A">${Number(secteur.totalCollecte||0).toLocaleString('fr-FR')} €</strong></div>`);
+    layer.addTo(map); layers.push(layer);
+    const b=layer.getBounds(); if(b.isValid()) bounds.push(b);
   }
-
-  if (bounds.length > 0) {
-    let allBounds = bounds[0];
-    bounds.forEach(b => { allBounds = allBounds.extend(b); });
-    map.fitBounds(allBounds, { padding: [20, 20] });
-  }
-
+  if (bounds.length>0) { let ab=bounds[0]; bounds.forEach(b=>{ab=ab.extend(b);}); map.fitBounds(ab,{padding:[20,20]}); }
   return layers;
 }
-
-// ── Afficher un seul secteur (vue terrain Amicaliste) ──
 async function afficherSecteurUnique(map, secteur) {
-  const codeInsee = COMMUNES_INSEE[secteur.commune];
-  if (!codeInsee) return null;
-
-  const geojson = await fetchContourCommune(codeInsee);
-  if (!geojson) return null;
-
-  const couleur = secteur.couleur || "#CC1D1D";
-  const layer = L.geoJSON(geojson, {
-    style: {
-      color: couleur,
-      weight: 3,
-      fillColor: couleur,
-      fillOpacity: 0.3
-    }
-  });
+  const codeInsee=COMMUNES_INSEE[secteur.commune]; if(!codeInsee) return null;
+  const geojson=await fetchContourCommune(codeInsee); if(!geojson) return null;
+  const couleur=secteur.couleur||"#CC1D1D";
+  const layer=L.geoJSON(geojson,{style:{color:couleur,weight:3,fillColor:couleur,fillOpacity:0.3}});
   layer.addTo(map);
-
-  const bounds = layer.getBounds();
-  if (bounds.isValid()) {
-    map.fitBounds(bounds, { padding: [30, 30] });
-  }
-
+  const bounds=layer.getBounds(); if(bounds.isValid()) map.fitBounds(bounds,{padding:[30,30]});
   return layer;
 }
 
-// ── Nettoyer une carte (avant de la recréer) ──
-function detruireCarte(map) {
-  if (map) {
-    try { map.remove(); } catch(e) {}
-  }
-}
-
-// ============================================================
-// historique.js — Historique multi-années des tournées
-// Amicale SP Pacy-sur-Eure — Tournée Calendriers
-// ============================================================
-
+// historique.js — Historique multi-années
 
 const COLLECTION_HISTORIQUE = "historique_saisons";
 
-// ── Archiver la saison en cours sous une année donnée ──────────
-// Capture un snapshot complet : secteurs, équipes, stats globales
-// Puis vide les collections actives pour repartir sur une saison neuve
 async function archiverSaison(annee) {
-  if (!annee || !/^\d{4}$/.test(String(annee))) {
-    throw new Error("Année invalide");
-  }
-
-  const [secteurs, equipes, stats] = await Promise.all([
-    lireSecteurs(),
-    lireEquipes(),
-    statsGlobalesTournee()
-  ]);
-
+  if (!annee||!/^\d{4}$/.test(String(annee))) throw new Error("Année invalide");
+  const [secteurs, equipes, stats] = await Promise.all([lireSecteurs(), lireEquipes(), statsGlobalesTournee()]);
   const snapshot = {
-    annee: Number(annee),
-    dateArchivage: new Date().toISOString(),
-    totalCollecte: stats.totalCollecte,
-    totalEspeces: stats.totalEspeces,
-    totalCheques: stats.totalCheques,
-    totalCarte: stats.totalCarte || 0,
-    nbDons: stats.nbDons,
-    nbPassages: stats.nbPassages,
-    nbSecteursTotal: stats.nbSecteursTotal,
-    nbSecteursTermines: stats.nbSecteursTermines,
-    secteurs: secteurs.map(s => ({
-      nom: s.nom,
-      commune: s.commune,
-      equipeNom: s.equipNom || null,
-      totalCollecte: s.totalCollecte || 0,
-      nbFoyersVisites: s.nbFoyersVisites || 0,
-      nbFoyersAbsents: s.nbFoyersAbsents || 0,
-      statut: s.statut
-    })),
-    equipes: stats.parEquipe.map(eq => ({
-      nom: eq.nom,
-      montant: eq.montant,
-      nbPassages: eq.nbPassages
-    }))
+    annee:Number(annee), dateArchivage:new Date().toISOString(),
+    totalCollecte:stats.totalCollecte, totalEspeces:stats.totalEspeces, totalCheques:stats.totalCheques, totalCarte:stats.totalCarte||0,
+    nbDons:stats.nbDons, nbPassages:stats.nbPassages, nbSecteursTotal:stats.nbSecteursTotal, nbSecteursTermines:stats.nbSecteursTermines,
+    secteurs:secteurs.map(s=>({ nom:s.nom, commune:s.commune, equipeNom:s.equipNom||null, totalCollecte:s.totalCollecte||0, nbFoyersVisites:s.nbFoyersVisites||0, nbFoyersAbsents:s.nbFoyersAbsents||0, statut:s.statut })),
+    equipes:stats.parEquipe.map(eq=>({ nom:eq.nom, montant:eq.montant, nbPassages:eq.nbPassages }))
   };
-
   await fsSet(COLLECTION_HISTORIQUE, String(annee), snapshot);
   return snapshot;
 }
 
-// ── Réinitialiser les collections actives pour une nouvelle saison ──
-// ⚠️ Supprime tous les secteurs, équipes et passages actuels
-// À utiliser uniquement après avoir archivé la saison précédente
 async function reinitialiserSaison() {
   const batch = writeBatch(db);
-
-  const [secteursSnap, equipesSnap, passagesSnap] = await Promise.all([
-    getDocs(collection(db, COLLECTIONS.SECTEURS)),
-    getDocs(collection(db, COLLECTIONS.EQUIPES)),
-    getDocs(collection(db, COLLECTIONS.PASSAGES))
-  ]);
-
-  let count = 0;
-  secteursSnap.docs.forEach(d => { batch.delete(d.ref); count++; });
-  equipesSnap.docs.forEach(d => { batch.delete(d.ref); count++; });
-  passagesSnap.docs.forEach(d => { batch.delete(d.ref); count++; });
-
-  // Firestore limite les batchs à 500 opérations ; au-delà, on découpe
-  if (count <= 500) {
-    await batch.commit();
-  } else {
-    // Fallback : suppression sans batch si trop de documents
-    const allDocs = [...secteursSnap.docs, ...equipesSnap.docs, ...passagesSnap.docs];
-    for (const d of allDocs) {
-      await fsDelete(d.ref.parent.id, d.id);
-    }
-  }
-
+  const [s,e,p] = await Promise.all([getDocs(collection(db,COLLECTIONS.SECTEURS)), getDocs(collection(db,COLLECTIONS.EQUIPES)), getDocs(collection(db,COLLECTIONS.PASSAGES))]);
+  let count=0;
+  s.docs.forEach(d=>{batch.delete(d.ref);count++;});
+  e.docs.forEach(d=>{batch.delete(d.ref);count++;});
+  p.docs.forEach(d=>{batch.delete(d.ref);count++;});
+  if (count<=500) await batch.commit();
   return count;
 }
 
-// ── Lire l'historique d'une année spécifique ────────────────────
-async function lireSaison(annee) {
-  return fsGet(COLLECTION_HISTORIQUE, String(annee));
-}
-
-// ── Lire toutes les années archivées ─────────────────────────────
+async function lireSaison(annee) { return fsGet(COLLECTION_HISTORIQUE, String(annee)); }
 async function lireToutesLesSaisons() {
   const saisons = await fsGetAll(COLLECTION_HISTORIQUE);
-  return saisons.sort((a, b) => b.annee - a.annee); // plus récent en premier
+  return saisons.sort((a,b)=>b.annee-a.annee);
 }
-
-// ── Saisie manuelle d'une saison passée (sans détail des passages) ──
-// Utile pour intégrer des données récupérées auprès de l'amicale
-// sans avoir à reconstituer tout l'historique des passages individuels
-async function saisirSaisonManuelle({
-  annee, totalCollecte, totalEspeces = 0, totalCheques = 0, totalCarte = 0,
-  nbDons = 0, nbPassages = 0, secteurs = [], equipes = [], note = ""
-}) {
-  if (!annee || !/^\d{4}$/.test(String(annee))) {
-    throw new Error("Année invalide");
-  }
-  const snapshot = {
-    annee: Number(annee),
-    dateArchivage: new Date().toISOString(),
-    saisieManuelle: true,
-    note,
-    totalCollecte: Number(totalCollecte) || 0,
-    totalEspeces: Number(totalEspeces) || 0,
-    totalCheques: Number(totalCheques) || 0,
-    totalCarte: Number(totalCarte) || 0,
-    nbDons: Number(nbDons) || 0,
-    nbPassages: Number(nbPassages) || 0,
-    nbSecteursTotal: secteurs.length,
-    nbSecteursTermines: secteurs.length,
-    secteurs: secteurs.map(s => ({
-      nom: s.nom || "",
-      commune: s.commune || "",
-      equipeNom: s.equipeNom || null,
-      totalCollecte: Number(s.totalCollecte) || 0,
-      nbFoyersVisites: 0,
-      nbFoyersAbsents: 0,
-      statut: "termine"
-    })),
-    equipes: equipes.map(eq => ({
-      nom: eq.nom || "",
-      montant: Number(eq.montant) || 0,
-      nbPassages: Number(eq.nbPassages) || 0
-    }))
-  };
+async function saisirSaisonManuelle({ annee, totalCollecte, totalEspeces=0, totalCheques=0, totalCarte=0, nbDons=0, nbPassages=0, secteurs=[], note="" }) {
+  if (!annee||!/^\d{4}$/.test(String(annee))) throw new Error("Année invalide");
+  const snapshot = { annee:Number(annee), dateArchivage:new Date().toISOString(), saisieManuelle:true, note, totalCollecte:Number(totalCollecte)||0, totalEspeces:Number(totalEspeces)||0, totalCheques:Number(totalCheques)||0, totalCarte:Number(totalCarte)||0, nbDons:Number(nbDons)||0, nbPassages:Number(nbPassages)||0, nbSecteursTotal:secteurs.length, nbSecteursTermines:secteurs.length, secteurs:secteurs.map(s=>({nom:s.nom||"",commune:s.commune||"",equipeNom:s.equipeNom||null,totalCollecte:Number(s.totalCollecte)||0,nbFoyersVisites:0,nbFoyersAbsents:0,statut:"termine"})), equipes:[] };
   await fsSet(COLLECTION_HISTORIQUE, String(annee), snapshot);
   return snapshot;
 }
-
-// ── Supprimer une saison archivée ────────────────────────────────
-async function supprimerSaison(annee) {
-  return fsDelete(COLLECTION_HISTORIQUE, String(annee));
+async function supprimerSaison(annee) { return fsDelete(COLLECTION_HISTORIQUE, String(annee)); }
+function comparerSaisons(a, b) {
+  if (!a||!b) return null;
+  const ecartTotal = a.totalCollecte-b.totalCollecte;
+  const ecartPourcent = b.totalCollecte>0?Math.round((ecartTotal/b.totalCollecte)*1000)/10:null;
+  const secteursB = Object.fromEntries((b.secteurs||[]).map(s=>[s.nom,s]));
+  const comparaisonSecteurs = (a.secteurs||[]).map(sA=>{
+    const sB=secteursB[sA.nom]; const ecart=sB?sA.totalCollecte-sB.totalCollecte:null;
+    const ecartPct=sB&&sB.totalCollecte>0?Math.round((ecart/sB.totalCollecte)*1000)/10:null;
+    return { nom:sA.nom, commune:sA.commune, montantA:sA.totalCollecte, montantB:sB?sB.totalCollecte:null, ecart, ecartPct, tendance:ecart===null?"nouveau":ecart>0?"hausse":ecart<0?"baisse":"stable" };
+  });
+  return { anneeA:a.annee, anneeB:b.annee, totalA:a.totalCollecte, totalB:b.totalCollecte, ecartTotal, ecartPourcent, comparaisonSecteurs:comparaisonSecteurs.sort((a,b)=>(b.ecart||0)-(a.ecart||0)), comparaisonEquipes:[] };
 }
 
-// ── Comparer deux saisons ─────────────────────────────────────────
-function comparerSaisons(saisonA, saisonB) {
-  if (!saisonA || !saisonB) return null;
-
-  const ecartTotal = saisonA.totalCollecte - saisonB.totalCollecte;
-  const ecartPourcent = saisonB.totalCollecte > 0
-    ? Math.round((ecartTotal / saisonB.totalCollecte) * 1000) / 10
-    : null;
-
-  // Comparaison par secteur (matching par nom de secteur)
-  const secteursB = Object.fromEntries((saisonB.secteurs || []).map(s => [s.nom, s]));
-  const comparaisonSecteurs = (saisonA.secteurs || []).map(sA => {
-    const sB = secteursB[sA.nom];
-    const ecart = sB ? sA.totalCollecte - sB.totalCollecte : null;
-    const ecartPct = sB && sB.totalCollecte > 0
-      ? Math.round((ecart / sB.totalCollecte) * 1000) / 10
-      : null;
-    return {
-      nom: sA.nom,
-      commune: sA.commune,
-      montantA: sA.totalCollecte,
-      montantB: sB ? sB.totalCollecte : null,
-      ecart, ecartPct,
-      tendance: ecart === null ? "nouveau" : ecart > 0 ? "hausse" : ecart < 0 ? "baisse" : "stable"
-    };
-  });
-
-  // Comparaison par équipe (matching par nom)
-  const equipesB = Object.fromEntries((saisonB.equipes || []).map(e => [e.nom, e]));
-  const comparaisonEquipes = (saisonA.equipes || []).map(eA => {
-    const eB = equipesB[eA.nom];
-    const ecart = eB ? eA.montant - eB.montant : null;
-    return {
-      nom: eA.nom,
-      montantA: eA.montant,
-      montantB: eB ? eB.montant : null,
-      ecart,
-      tendance: ecart === null ? "nouveau" : ecart > 0 ? "hausse" : ecart < 0 ? "baisse" : "stable"
-    };
-  });
-
-  return {
-    anneeA: saisonA.annee,
-    anneeB: saisonB.annee,
-    totalA: saisonA.totalCollecte,
-    totalB: saisonB.totalCollecte,
-    ecartTotal,
-    ecartPourcent,
-    comparaisonSecteurs: comparaisonSecteurs.sort((a, b) => (b.ecart || 0) - (a.ecart || 0)),
-    comparaisonEquipes: comparaisonEquipes.sort((a, b) => (b.ecart || 0) - (a.ecart || 0))
-  };
+// gamification.js — Badges, paliers et classement ludique
+const PALIERS = [
+  { seuil:100, icone:"🏆", label:"Champion", couleur:"#EAB308" },
+  { seuil:75,  icone:"🥇", label:"Or",       couleur:"#F59E0B" },
+  { seuil:50,  icone:"🥈", label:"Argent",   couleur:"#9CA3AF" },
+  { seuil:25,  icone:"🥉", label:"Bronze",   couleur:"#B45309" },
+  { seuil:0,   icone:"🔰", label:"Débutant", couleur:"#6B7280" }
+];
+function getPalier(pct) { return PALIERS.find(p=>pct>=p.seuil)||PALIERS[PALIERS.length-1]; }
+function pourcentCompletionEquipe(equipeId, secteurs) {
+  const s = secteurs.filter(s=>s.equipeId===equipeId);
+  if (!s.length) return 0;
+  return Math.round((s.filter(s=>s.statut==="termine").length/s.length)*100);
 }
-
-// ============================================================
-// app.js — Routing, authentification, navigation principale
-// Amicale SP Pacy-sur-Eure — Tournée Calendriers
-// ============================================================
+const BADGES = [
+  { id:"pionnier",      icone:"🚀", nom:"Pionnier",          description:"Première équipe à clôturer un secteur",    test:(eq,ctx)=>ctx.premierATerminer===eq.id },
+  { id:"top_collecteur",icone:"💰", nom:"Top collecteur",    description:"Équipe en tête du classement",             test:(eq,ctx)=>ctx.classement[0]?.id===eq.id&&ctx.classement[0]?.montant>0 },
+  { id:"sans_faute",    icone:"🎯", nom:"Sans faute",        description:"Meilleur taux de dons (peu de refus)",     test:(eq,ctx)=>{ if(eq.nbPassages<5)return false; const t=eq.nbRefus/eq.nbPassages; return ctx.meilleurTauxRefus!==null&&t===ctx.meilleurTauxRefus&&t<0.15; } },
+  { id:"serie_3",       icone:"🔥", nom:"Série de 3",        description:"3 secteurs ou plus terminés",              test:(eq,ctx)=>ctx.secteursTerminesParEquipe[eq.id]>=3 },
+  { id:"palier_500",    icone:"🌟", nom:"Cap des 500€",      description:"A dépassé 500€ collectés",                 test:(eq)=>eq.montant>=500 },
+  { id:"palier_1000",   icone:"💎", nom:"Cap des 1000€",     description:"A dépassé 1000€ collectés",                test:(eq)=>eq.montant>=1000 },
+  { id:"complet",       icone:"🏁", nom:"Mission accomplie", description:"100% des secteurs assignés terminés",      test:(eq,ctx)=>ctx.pourcentParEquipe[eq.id]===100&&ctx.secteursParEquipe[eq.id]>0 }
+];
+function calculerBadges(parEquipe, secteurs, passages) {
+  const classement = [...parEquipe].sort((a,b)=>b.montant-a.montant);
+  const secteursTerminesParEquipe={}, secteursParEquipe={}, pourcentParEquipe={};
+  parEquipe.forEach(eq=>{
+    const s=secteurs.filter(s=>s.equipeId===eq.id);
+    secteursParEquipe[eq.id]=s.length;
+    secteursTerminesParEquipe[eq.id]=s.filter(s=>s.statut==="termine").length;
+    pourcentParEquipe[eq.id]=pourcentCompletionEquipe(eq.id,secteurs);
+  });
+  const premierATerminer = secteurs.filter(s=>s.statut==="termine"&&s.dateFin).sort((a,b)=>new Date(a.dateFin)-new Date(b.dateFin))[0]?.equipeId||null;
+  const tauxRefus = parEquipe.map(eq=>eq.nbPassages>=5?(eq.nbRefus||0)/eq.nbPassages:null).filter(t=>t!==null);
+  const meilleurTauxRefus = tauxRefus.length>0?Math.min(...tauxRefus):null;
+  const ctx = { classement, secteursTerminesParEquipe, secteursParEquipe, pourcentParEquipe, premierATerminer, meilleurTauxRefus };
+  const resultats={};
+  parEquipe.forEach(eq=>{ resultats[eq.id]=BADGES.filter(b=>{ try{return b.test(eq,ctx);}catch(e){return false;} }); });
+  return resultats;
+}
+function detecterNouveauxBadges(avant, apres) {
+  const nouveaux=[];
+  for (const equipeId in apres) {
+    const avantIds=(avant[equipeId]||[]).map(b=>b.id);
+    apres[equipeId].forEach(badge=>{ if(!avantIds.includes(badge.id)) nouveaux.push({equipeId,badge}); });
+  }
+  return nouveaux;
+}
+function getPodium(parEquipe) { return [...parEquipe].sort((a,b)=>b.montant-a.montant).slice(0,3); }
 
 
 // ── État global de session ────────────────────────────────────
@@ -1679,6 +1119,7 @@ const ROUTES = {
   "#passages":           renderPassages,
   "#relances":           renderRelances,
   "#historique":         renderHistorique,
+  "#classement":         renderClassement,
   "#config":             renderConfig,
   "#terrain":            renderTerrain,
   "#terrain-passages":   renderTerrainPassages
@@ -1902,6 +1343,7 @@ function layoutAdmin(activeHash, content) {
     { hash: "#passages",  icon: "📋", label: "Passages" },
     { hash: "#relances",  icon: "🔔", label: "Relances" },
     { hash: "#historique", icon: "📅", label: "Historique" },
+    { hash: "#classement", icon: "🏆", label: "Classement" },
     { hash: "#config",    icon: "⚙️",  label: "Config" }
   ];
   return `
@@ -2987,7 +2429,22 @@ function renderTerrainSecteurs(secteurs) {
     content.innerHTML = `<p class="empty-state terrain-empty">Aucun secteur assigné à ton équipe pour le moment.<br>L'Amicale t'en attribuera prochainement.</p>`;
     return;
   }
+  const nbTotal = secteurs.length;
+  const nbTermines = secteurs.filter(s => s.statut === "termine").length;
+  const pct = Math.round((nbTermines / nbTotal) * 100);
+  const palier = getPalier(pct);
+  const couleurBar = pct === 100 ? "#EAB308" : pct >= 75 ? "#F59E0B" : pct >= 50 ? "#9CA3AF" : pct >= 25 ? "#B45309" : "#EF4444";
   content.innerHTML = `
+    <div class="terrain-progress-wrap">
+      <div class="terrain-progress-label">
+        <span>${palier.icone} Ma progression — ${palier.label}</span>
+        <span style="color:${couleurBar};font-weight:700;">${pct}%</span>
+      </div>
+      <div class="terrain-progress-bar">
+        <div class="terrain-progress-fill" style="width:${pct}%;background:${couleurBar};"></div>
+      </div>
+      <div style="font-size:.78rem;color:var(--ardoise-mid);margin-top:6px;">${nbTermines} / ${nbTotal} secteur(s) terminé(s)</div>
+    </div>
     <div class="terrain-secteurs">
       ${secteurs.map(s => `
         <div class="terrain-secteur-card" onclick="naviguerTerrain('${s.id}')">
@@ -3179,6 +2636,92 @@ window.naviguer = naviguer;
 // Le hash actuel déclenche l'affichage initial
 const initHash = window.location.hash || "#login";
 window.dispatchEvent(new HashChangeEvent("hashchange"));
+
+  
+// ════════════════════════════════════════════════════════════
+//  CLASSEMENT & RÉCOMPENSES
+// ════════════════════════════════════════════════════════════
+
+async function renderClassement() {
+  if (APP.role !== "admin") { naviguer("#login"); return; }
+  stopUnsubs();
+
+  document.getElementById("main").innerHTML = layoutAdmin("#classement", `
+    <div class="page-header"><h1>🏆 Classement & Récompenses</h1></div>
+    <div id="classement-content"><div class="loader">Chargement…</div></div>
+  `);
+  bindLogout();
+
+  async function refresh() {
+    const [stats, secteurs, passages] = await Promise.all([
+      statsGlobalesTournee(), lireSecteurs(), fsGetAll(COLLECTIONS.PASSAGES)
+    ]);
+    const content = document.getElementById("classement-content");
+    if (!content) return;
+    const podium = getPodium(stats.parEquipe);
+    const badgesParEquipe = calculerBadges(stats.parEquipe, secteurs, passages);
+
+    content.innerHTML = `
+      ${podium.length > 0 ? `<div class="podium-wrap">
+        ${podium[1] ? renderPodiumPlace(podium[1], 2, secteurs) : '<div></div>'}
+        ${podium[0] ? renderPodiumPlace(podium[0], 1, secteurs) : '<div></div>'}
+        ${podium[2] ? renderPodiumPlace(podium[2], 3, secteurs) : '<div></div>'}
+      </div>` : '<p class="empty-state">Aucune équipe pour le moment.</p>'}
+
+      <div class="section-block">
+        <h2>Toutes les équipes</h2>
+        <div class="equipes-ranking-grid">
+          ${stats.parEquipe.map((eq, i) => {
+            const pct = pourcentCompletionEquipe(eq.id, secteurs);
+            const palier = getPalier(pct);
+            const badges = badgesParEquipe[eq.id] || [];
+            return `<div class="ranking-card">
+              <div class="ranking-card-top">
+                <span class="ranking-pos">#${i+1}</span>
+                <span class="ranking-nom">${eq.nom}</span>
+                <span class="ranking-palier" title="${palier.label}">${palier.icone}</span>
+              </div>
+              <div class="ranking-montant">${formatMontant(eq.montant)}</div>
+              <div class="ranking-bar-wrap"><div class="ranking-bar" style="width:${pct}%"></div></div>
+              <div class="ranking-sub">${pct}% des secteurs terminés</div>
+              ${badges.length > 0
+                ? `<div class="ranking-badges">${badges.map(b => `<span title="${b.nom} — ${b.description}">${b.icone}</span>`).join('')}</div>`
+                : `<div class="ranking-badges ranking-badges--empty">Aucun badge pour l'instant</div>`}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h2>Tous les badges disponibles</h2>
+        <div class="badges-grid">
+          ${BADGES.map(b => `<div class="badge-card">
+            <div class="badge-card-icon">${b.icone}</div>
+            <div class="badge-card-nom">${b.nom}</div>
+            <div class="badge-card-desc">${b.description}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  await refresh();
+  const unsub = ecouterSecteurs(async () => { await refresh(); });
+  APP.unsubs.push(unsub);
+}
+
+function renderPodiumPlace(eq, place, secteurs) {
+  const hauteurs = { 1:"podium-place--1", 2:"podium-place--2", 3:"podium-place--3" };
+  const medailles = { 1:"🥇", 2:"🥈", 3:"🥉" };
+  const pct = pourcentCompletionEquipe(eq.id, secteurs);
+  return `<div class="podium-place ${hauteurs[place]}">
+    <div class="podium-medaille">${medailles[place]}</div>
+    <div class="podium-nom">${eq.nom}</div>
+    <div class="podium-montant">${formatMontant(eq.montant)}</div>
+    <div class="podium-pct">${pct}%</div>
+    <div class="podium-bloc">${place}</div>
+  </div>`;
+}
 
   </script>
   <script>
