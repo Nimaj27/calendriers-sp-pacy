@@ -603,6 +603,13 @@ body {
 .passage-edit-btn:active { transform: scale(.9); }
 #modal-correction .modal-inner { max-height: 88vh; }
 #modal-correction .modal-actions { flex-wrap: wrap; }
+
+/* ── Section alerte (secteurs bloqués) ─────────────────────── */
+.section-block--alerte {
+  border-left: 4px solid var(--orange);
+  background: #FFFBEB;
+}
+.section-block--alerte h2 { color: #92400E; }
 </style>
 </head>
 <body>
@@ -1735,7 +1742,31 @@ async function renderDashboard() {
   });
 
   async function refreshDashboard() {
-    const stats = await statsGlobalesTournee();
+    const [stats, secteursActuels, passagesActuels] = await Promise.all([
+      statsGlobalesTournee(),
+      lireSecteurs(),
+      fsGetAll(COLLECTIONS.PASSAGES)
+    ]);
+    const badgesParEquipe = calculerBadges(stats.parEquipe, secteursActuels, passagesActuels);
+
+    // Détection de nouveaux badges débloqués
+    if (APP._badgesCache) {
+      detecterNouveauxBadges(APP._badgesCache, badgesParEquipe).forEach(({ equipeId, badge }) => {
+        const eq = stats.parEquipe.find(e => e.id === equipeId);
+        if (eq) toast(`🎉 ${eq.nom} a débloqué ${badge.icone} ${badge.nom} !`, "success");
+      });
+    }
+    APP._badgesCache = badgesParEquipe;
+
+    // Secteurs bloqués : "en cours" depuis plus de 3 jours
+    const maintenant = Date.now();
+    const SEUIL_JOURS = 3;
+    const secteursBloques = secteursActuels
+      .filter(s => s.statut === "en_cours" && s.dateDebut)
+      .map(s => ({ ...s, joursEcoules: Math.floor((maintenant - new Date(s.dateDebut).getTime()) / 86400000) }))
+      .filter(s => s.joursEcoules >= SEUIL_JOURS)
+      .sort((a, b) => b.joursEcoules - a.joursEcoules);
+
     const content = document.getElementById("dashboard-content");
     if (!content) return;
     content.innerHTML = `
@@ -1763,22 +1794,57 @@ async function renderDashboard() {
         </div>
       </div>
 
+      ${secteursBloques.length > 0 ? `
+      <div class="section-block section-block--alerte">
+        <h2>⏳ Secteurs en cours depuis plus de ${SEUIL_JOURS} jours</h2>
+        <p style="font-size:.85rem;color:var(--ardoise-mid);margin-bottom:12px;">
+          Ces secteurs n'ont pas été clôturés. Un rappel à l'équipe concernée peut être utile.
+        </p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Secteur</th><th>Commune</th><th>Équipe</th><th>Depuis</th><th>Collecté</th></tr></thead>
+            <tbody>
+              ${secteursBloques.map(s => `
+                <tr>
+                  <td><strong>${s.nom}</strong></td>
+                  <td>${s.commune}</td>
+                  <td>${s.equipNom || '—'}</td>
+                  <td style="color:${s.joursEcoules >= 7 ? 'var(--rouge)' : 'var(--orange)'};font-weight:600;">
+                    ${s.joursEcoules} jour${s.joursEcoules > 1 ? 's' : ''}
+                  </td>
+                  <td>${formatMontant(s.totalCollecte)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
+
       <div class="section-block">
-        <h2>Classement des équipes</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <h2 style="margin:0;">Classement des équipes</h2>
+          <a href="#classement" class="btn btn--sm btn--ghost">🏆 Podium complet</a>
+        </div>
         <div class="equipes-ranking-grid">
-          ${stats.parEquipe.map((eq, i) => `
+          ${stats.parEquipe.map((eq, i) => {
+            const pct = pourcentCompletionEquipe(eq.id, secteursActuels);
+            const palier = getPalier(pct);
+            const badges = badgesParEquipe[eq.id] || [];
+            return `
             <div class="ranking-card">
               <div class="ranking-card-top">
                 <span class="ranking-pos">#${i+1}</span>
                 <span class="ranking-nom">${eq.nom}</span>
+                <span class="ranking-palier" title="${palier.label} — ${pct}% terminé">${palier.icone}</span>
               </div>
               <div class="ranking-montant">${formatMontant(eq.montant)}</div>
               <div class="ranking-bar-wrap">
                 <div class="ranking-bar" style="width:${stats.totalCollecte > 0 ? Math.round(eq.montant/stats.totalCollecte*100) : 0}%"></div>
               </div>
-              <div class="ranking-sub">${eq.nbPassages} passage(s)</div>
+              <div class="ranking-sub">${eq.nbPassages} passage(s) · ${pct}% terminé</div>
+              ${badges.length > 0 ? `<div class="ranking-badges">${badges.map(b => `<span title="${b.nom} — ${b.description}">${b.icone}</span>`).join('')}</div>` : ''}
             </div>
-          `).join('')}
+          `;}).join('')}
         </div>
       </div>
     `;
