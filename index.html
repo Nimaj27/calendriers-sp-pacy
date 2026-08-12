@@ -651,6 +651,28 @@ body {
 .notif-etat--on      { background: var(--vert-light); color: #14532D; font-weight: 500; }
 .notif-etat--off     { background: var(--rouge-light); color: var(--rouge-dark); }
 .notif-etat--pending { background: var(--jaune-light); color: #92400E; }
+
+/* ── Mode binôme : choix du membre ───────────────────────────── */
+.membres-choix { display: flex; flex-direction: column; gap: var(--sp-3); }
+.membre-btn {
+  padding: var(--sp-4); border: 2px solid var(--gris-bord);
+  border-radius: var(--r-md); background: var(--blanc);
+  font-family: var(--font); font-size: 1rem; font-weight: 600;
+  color: var(--ardoise); cursor: pointer;
+  transition: all .15s; text-align: center;
+}
+.membre-btn:hover  { border-color: var(--rouge); background: var(--rouge-light); }
+.membre-btn:active { transform: scale(.98); }
+
+/* ── Auteur d'une saisie (mode binôme) ──────────────────────── */
+.passage-meta { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
+.passage-auteur {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--ardoise); color: var(--blanc);
+  font-size: .65rem; font-weight: 700; letter-spacing: .02em;
+  cursor: help; flex-shrink: 0;
+}
 </style>
 </head>
 <body>
@@ -837,7 +859,7 @@ function ecouterEquipes(callback) {
   });
 }
 
-async function ajouterPassage({ secteurId, equipeId, equipeNom, adresse, statut, montant=0, modePaiement=null, nomDonateur="", note="" }) {
+async function ajouterPassage({ secteurId, equipeId, equipeNom, adresse, statut, montant=0, modePaiement=null, nomDonateur="", note="", saisiPar="" }) {
   if (!secteurId||!equipeId) throw new Error("secteurId et equipeId obligatoires");
   if (!Object.values(STATUT_PASSAGE).includes(statut)) throw new Error("Statut invalide");
   if (statut===STATUT_PASSAGE.DON && montant<=0) throw new Error("Montant requis pour un don");
@@ -845,7 +867,7 @@ async function ajouterPassage({ secteurId, equipeId, equipeNom, adresse, statut,
     secteurId, equipeId, equipeNom, adresse:adresse||"", statut,
     montant: statut===STATUT_PASSAGE.DON ? Number(montant) : 0,
     modePaiement: statut===STATUT_PASSAGE.DON ? modePaiement : null,
-    nomDonateur, note, aRelancer: statut===STATUT_PASSAGE.ABSENT, datePassage: new Date().toISOString()
+    nomDonateur, note, saisiPar, aRelancer: statut===STATUT_PASSAGE.ABSENT, datePassage: new Date().toISOString()
   });
   await recalculerTotauxSecteur(secteurId);
   return passage;
@@ -854,6 +876,19 @@ async function marquerRelance(passageId, secteurId) {
   await fsUpdate(COLLECTIONS.PASSAGES, passageId, { aRelancer:true, statut:STATUT_PASSAGE.RELANCE });
   await recalculerTotauxSecteur(secteurId);
 }
+// Vérifie si une adresse a déjà été saisie dans ce secteur (anti-doublon binôme)
+// Retourne le passage existant le plus récent, ou null
+async function verifierDoublonAdresse(secteurId, adresse) {
+  if (!adresse || !adresse.trim()) return null;
+  const passages = await fsQuery(COLLECTIONS.PASSAGES, where("secteurId","==",secteurId));
+  const norm = (s) => (s||"").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const cible = norm(adresse);
+  if (!cible) return null;
+  const matches = passages.filter(p => norm(p.adresse) === cible);
+  if (matches.length === 0) return null;
+  return matches.sort((a,b)=>(b.datePassage||"").localeCompare(a.datePassage||""))[0];
+}
+
 async function modifierPassage(passageId, data) {
   const { secteurId, ...champs } = data;
   await fsUpdate(COLLECTIONS.PASSAGES, passageId, champs);
@@ -1635,7 +1670,8 @@ const LOGO_SP = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYAAAA5Z
 
 // ── État global de session ────────────────────────────────────
 window.APP = {
-  role:      null,   // "admin" | "equipier"
+  role:      null,
+  membre:    null,   // prénom de l'équipier connecté (mode binôme)   // "admin" | "equipier"
   user:      null,   // objet Firebase Auth (admin) ou objet équipe (equipier)
   equipeId:  null,
   equipeNom: null,
@@ -1744,6 +1780,7 @@ onAuth(async (user) => {
     APP.user = eq;
     APP.equipeId  = eq.id;
     APP.equipeNom = eq.nom;
+    APP.membre    = sessionStorage.getItem("membre") || null;
     naviguer("#terrain");
     return;
   }
@@ -1895,7 +1932,16 @@ function bindLoginEvents() {
             APP.equipeId  = equipe.id;
             APP.equipeNom = equipe.nom;
             sessionStorage.setItem("equipe", JSON.stringify(equipe));
-            naviguer("#terrain");
+            // Si l'équipe a plusieurs membres, demander qui se connecte
+            const membres = (equipe.membres || []).filter(Boolean);
+            if (membres.length > 1) {
+              afficherChoixMembre(equipe, membres);
+            } else {
+              const seul = membres[0] || equipe.nom;
+              APP.membre = seul;
+              sessionStorage.setItem("membre", seul);
+              naviguer("#terrain");
+            }
           } else {
             errEl && errEl.classList.remove("hidden");
             pinSaisi = "";
@@ -1908,6 +1954,40 @@ function bindLoginEvents() {
           updatePinDisplay();
         }
       }
+    });
+  });
+}
+
+
+// ── Écran de choix du membre (mode binôme/trinôme) ──────────────
+function afficherChoixMembre(equipe, membres) {
+  const main = document.getElementById("main");
+  main.innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-logo">
+          <img src="${LOGO_SP}" alt="SP Pacy" style="width:64px;height:64px;object-fit:contain;border-radius:50%;">
+          <div class="login-logo-text">
+            <span class="login-logo-title">${equipe.nom}</span>
+            <span class="login-logo-sub">Qui es-tu ?</span>
+          </div>
+        </div>
+        <p class="login-hint">Sélectionne ton nom pour que tes saisies soient identifiées.</p>
+        <div class="membres-choix">
+          ${membres.map(m => `
+            <button class="membre-btn" data-membre="${m.replace(/"/g, '&quot;')}">${m}</button>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  main.querySelectorAll(".membre-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const membre = btn.dataset.membre;
+      APP.membre = membre;
+      sessionStorage.setItem("membre", membre);
+      naviguer("#terrain");
     });
   });
 }
@@ -1966,7 +2046,8 @@ function bindLogout() {
     stopUnsubs();
     if (APP.role === "admin") await logoutGoogle();
     sessionStorage.removeItem("equipe");
-    APP.role = null; APP.user = null; APP.equipeId = null; APP.equipeNom = null;
+    sessionStorage.removeItem("membre");
+    APP.role = null; APP.user = null; APP.equipeId = null; APP.equipeNom = null; APP.membre = null;
     naviguer("#login");
   });
   bindMobileMenu();
@@ -3144,7 +3225,7 @@ async function renderTerrain() {
     <div class="terrain-layout">
       <header class="terrain-header">
         <div class="terrain-brand">🚒 SP Pacy — Tournée Calendriers</div>
-        <div class="terrain-equipe">👥 ${APP.equipeNom}</div>
+        <div class="terrain-equipe">👥 ${APP.equipeNom}${APP.membre ? ` · ${APP.membre}` : ''}</div>
         ${renderNetworkBadge()}
         <button id="btn-logout-terrain" class="btn btn--ghost btn--sm">Quitter</button>
       </header>
@@ -3159,7 +3240,8 @@ async function renderTerrain() {
 
   document.getElementById("btn-logout-terrain")?.addEventListener("click", () => {
     sessionStorage.removeItem("equipe");
-    APP.role = null; APP.user = null; APP.equipeId = null; APP.equipeNom = null;
+    sessionStorage.removeItem("membre");
+    APP.role = null; APP.user = null; APP.equipeId = null; APP.equipeNom = null; APP.membre = null;
     naviguer("#login");
   });
 
@@ -3403,6 +3485,24 @@ async function renderTerrainPassages() {
       toast("Saisis le montant du don", "error"); return;
     }
 
+    // ── Anti-doublon (mode binôme/trinôme) ──
+    if (adresse) {
+      const doublon = await verifierDoublonAdresse(secteurId, adresse);
+      if (doublon) {
+        const qui = doublon.saisiPar || doublon.equipeNom || "quelqu'un";
+        const quand = doublon.datePassage ? doublon.datePassage.slice(11, 16) : "";
+        const detail = doublon.statut === "don"
+          ? `${formatMontant(doublon.montant)}`
+          : STATUT_PASSAGE_LABEL[doublon.statut] || doublon.statut;
+        const ok = confirm(
+          `⚠️ Adresse déjà enregistrée\n\n` +
+          `« ${doublon.adresse} » a été noté par ${qui}${quand ? ` à ${quand}` : ""} (${detail}).\n\n` +
+          `Enregistrer quand même ?`
+        );
+        if (!ok) return;
+      }
+    }
+
     const btn = document.getElementById("btn-saisir");
     setLoading(btn, true);
     try {
@@ -3415,7 +3515,8 @@ async function renderTerrainPassages() {
         montant,
         modePaiement: statutSelectionne === "don" ? modeSelectionne : null,
         nomDonateur: donateur,
-        note
+        note,
+        saisiPar: APP.membre || ""
       });
 
       // Reset form
@@ -3447,7 +3548,10 @@ async function renderTerrainPassages() {
           <span class="passage-badge">${STATUT_PASSAGE_LABEL[p.statut] || p.statut}</span>
           ${p.statut === 'don' ? `<span class="passage-montant">${formatMontant(p.montant)} ${p.modePaiement === 'cheque' ? '📝' : p.modePaiement === 'carte' ? '💳' : '💵'}</span>` : ''}
         </div>
-        <span class="passage-heure">${(p.datePassage || '').slice(11,16)}</span>
+        <span class="passage-meta">
+          ${p.saisiPar ? `<span class="passage-auteur" title="Saisi par ${p.saisiPar}">${p.saisiPar.slice(0,2).toUpperCase()}</span>` : ''}
+          <span class="passage-heure">${(p.datePassage || '').slice(11,16)}</span>
+        </span>
         <button class="passage-edit-btn" onclick="corrigerPassage('${p.id}', '${secteurId}')" title="Corriger">✏️</button>
       </div>
     `).join('');
