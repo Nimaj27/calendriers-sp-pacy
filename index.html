@@ -1072,8 +1072,13 @@ async function calculerZoneApproximative(rues, commune) {
     await new Promise(r => setTimeout(r, 60));
   }
 
+  console.log(`[carte] ${commune} — ${points.length}/${echantillon.length} rues géocodées`);
+
   // Il faut assez de points fiables, sinon on retombe sur le contour communal
-  if (points.length < 4) return null;
+  if (points.length < 4) {
+    console.warn(`[carte] Pas assez de points pour dessiner une zone (${points.length})`);
+    return null;
+  }
 
   try {
     const fc = turf.featureCollection(points.map(p => turf.point(p)));
@@ -1133,8 +1138,13 @@ async function afficherSecteursSurCarte(map, secteurs, equipes=[]) {
 
     let geojson = null;
     const communeDecoupee = nbParCommune[secteur.commune] > 1;
+    if (communeDecoupee) {
+      console.log(`[carte] "${secteur.nom}" — commune découpée, ${(secteur.rues||[]).length} rues en base`);
+    }
     if (communeDecoupee && secteur.rues && secteur.rues.length > 0) {
       geojson = await calculerZoneApproximative(secteur.rues, secteur.commune);
+      if (geojson) console.log(`[carte] ✅ zone calculée pour "${secteur.nom}"`);
+      else console.warn(`[carte] ❌ échec zone pour "${secteur.nom}" → contour communal`);
     }
     if (!geojson) geojson = await fetchContourCommune(codeInsee);
     if (!geojson) continue;
