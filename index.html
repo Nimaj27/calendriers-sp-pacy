@@ -1018,15 +1018,35 @@ function chargerTurf() {
 
 // ── Géocodage des rues via l'API Adresse (BAN) ──
 const _geocodeCache = {};
+
+// Centre approximatif de la zone couverte (Pacy-sur-Eure)
+const CENTRE_ZONE = [1.383, 49.016]; // [lon, lat]
+const RAYON_MAX_KM = 25;             // au-delà, on rejette le point (erreur de géocodage)
+
+function distanceKm(a, b) {
+  const R = 6371, toRad = x => x * Math.PI / 180;
+  const dLat = toRad(b[1]-a[1]), dLon = toRad(b[0]-a[0]);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a[1]))*Math.cos(toRad(b[1]))*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
 async function geocoderRue(rue, commune) {
   const key = `${rue}|${commune}`;
   if (_geocodeCache[key] !== undefined) return _geocodeCache[key];
   try {
     const q = encodeURIComponent(`${rue} ${commune}`);
-    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${q}&limit=1`);
+    // Biais géographique : on demande à l'API de chercher autour de Pacy
+    const url = `https://api-adresse.data.gouv.fr/search/?q=${q}&limit=1&lat=${CENTRE_ZONE[1]}&lon=${CENTRE_ZONE[0]}`;
+    const res = await fetch(url);
     if (!res.ok) { _geocodeCache[key] = null; return null; }
     const data = await res.json();
-    const coords = data.features?.[0]?.geometry?.coordinates || null;
+    const f = data.features?.[0];
+    if (!f) { _geocodeCache[key] = null; return null; }
+    const coords = f.geometry?.coordinates;
+    // Rejeter les résultats manifestement hors zone (mauvais géocodage)
+    if (!coords || distanceKm(CENTRE_ZONE, coords) > RAYON_MAX_KM) {
+      _geocodeCache[key] = null; return null;
+    }
     _geocodeCache[key] = coords;
     return coords;
   } catch (e) {
@@ -1036,32 +1056,40 @@ async function geocoderRue(rue, commune) {
 }
 
 // ── Zone approximative = enveloppe convexe autour des rues géocodées ──
+const SURFACE_MAX_KM2 = 60; // au-delà, la zone est jugée aberrante
+
 async function calculerZoneApproximative(rues, commune) {
   if (!rues || rues.length === 0) return null;
   try { await chargerTurf(); } catch(e) { return null; }
 
   const points = [];
-  // Limiter à 40 rues max pour ne pas saturer l'API
-  for (const rue of rues.slice(0, 40)) {
+  const echantillon = rues.slice(0, 25); // limite pour ne pas saturer l'API
+
+  for (const rue of echantillon) {
     const coords = await geocoderRue(rue, commune);
     if (coords) points.push(coords);
+    // Petite pause pour éviter les 504 / rate-limit de l'API
+    await new Promise(r => setTimeout(r, 60));
   }
 
-  if (points.length < 3) {
-    if (points.length > 0) {
-      try { return turf.circle(points[0], 0.35, { units:"kilometers", steps:24 }); }
-      catch(e) { return null; }
-    }
-    return null;
-  }
+  // Il faut assez de points fiables, sinon on retombe sur le contour communal
+  if (points.length < 4) return null;
 
   try {
     const fc = turf.featureCollection(points.map(p => turf.point(p)));
     const hull = turf.convex(fc);
     if (!hull) return null;
-    return turf.buffer(hull, 0.12, { units:"kilometers" }) || hull;
+
+    const zone = turf.buffer(hull, 0.12, { units:"kilometers" }) || hull;
+
+    // Garde-fou : si la zone calculée est démesurée, on la rejette
+    const aire = turf.area(zone) / 1e6; // m² → km²
+    if (aire > SURFACE_MAX_KM2) {
+      console.warn(`Zone rejetée (${Math.round(aire)} km²) pour ${commune}`);
+      return null;
+    }
+    return zone;
   } catch (e) {
-    console.warn("Erreur enveloppe convexe", e);
     return null;
   }
 }
@@ -1094,11 +1122,18 @@ async function initCarte(containerId, options={}) {
 }
 async function afficherSecteursSurCarte(map, secteurs, equipes=[]) {
   const layers=[], bounds=[];
+
+  // Repérer les communes découpées en plusieurs secteurs : elles seules ont
+  // besoin d'un géocodage par rues (sinon les contours se superposeraient).
+  const nbParCommune = {};
+  secteurs.forEach(s => { nbParCommune[s.commune] = (nbParCommune[s.commune]||0) + 1; });
+
   for (const secteur of secteurs) {
     const codeInsee=COMMUNES_INSEE[secteur.commune]; if(!codeInsee) continue;
-    // Si le secteur a des rues renseignées, on dessine une zone autour d'elles
+
     let geojson = null;
-    if (secteur.rues && secteur.rues.length > 0) {
+    const communeDecoupee = nbParCommune[secteur.commune] > 1;
+    if (communeDecoupee && secteur.rues && secteur.rues.length > 0) {
       geojson = await calculerZoneApproximative(secteur.rues, secteur.commune);
     }
     if (!geojson) geojson = await fetchContourCommune(codeInsee);
