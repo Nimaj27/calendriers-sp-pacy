@@ -1083,7 +1083,7 @@ async function calculerZoneApproximative(rues, commune) {
     // maxEdge = longueur max d'une arête en km ; si trop petit, turf renvoie null,
     // on réessaie donc en élargissant progressivement.
     let hull = null;
-    for (const maxEdge of [0.35, 0.6, 1.0, 1.8]) {
+    for (const maxEdge of [1.2, 1.8, 2.5]) {
       try {
         hull = turf.concave(fc, { maxEdge, units: "kilometers" });
         if (hull) break;
@@ -1094,7 +1094,7 @@ async function calculerZoneApproximative(rues, commune) {
     if (!hull) return null;
 
     // Buffer réduit (60 m au lieu de 120) pour limiter les recouvrements
-    const zone = turf.buffer(hull, 0.06, { units:"kilometers" }) || hull;
+    const zone = turf.buffer(hull, 0.10, { units:"kilometers" }) || hull;
 
     // Garde-fou : si la zone calculée est démesurée, on la rejette
     const aire = turf.area(zone) / 1e6; // m² → km²
