@@ -1000,6 +1000,72 @@ function getCouleurEquipe(equipeId, toutesLesEquipes) {
   return PALETTE_EQUIPES[idx%PALETTE_EQUIPES.length];
 }
 const _contourCache = {};
+
+// ── Turf.js pour le calcul d'enveloppe convexe ──
+let _turfLoading = null;
+function chargerTurf() {
+  if (window.turf) return Promise.resolve();
+  if (_turfLoading) return _turfLoading;
+  _turfLoading = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js";
+    s.onload = () => res();
+    s.onerror = () => rej(new Error("Turf.js indisponible"));
+    document.head.appendChild(s);
+  });
+  return _turfLoading;
+}
+
+// ── Géocodage des rues via l'API Adresse (BAN) ──
+const _geocodeCache = {};
+async function geocoderRue(rue, commune) {
+  const key = `${rue}|${commune}`;
+  if (_geocodeCache[key] !== undefined) return _geocodeCache[key];
+  try {
+    const q = encodeURIComponent(`${rue} ${commune}`);
+    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${q}&limit=1`);
+    if (!res.ok) { _geocodeCache[key] = null; return null; }
+    const data = await res.json();
+    const coords = data.features?.[0]?.geometry?.coordinates || null;
+    _geocodeCache[key] = coords;
+    return coords;
+  } catch (e) {
+    _geocodeCache[key] = null;
+    return null;
+  }
+}
+
+// ── Zone approximative = enveloppe convexe autour des rues géocodées ──
+async function calculerZoneApproximative(rues, commune) {
+  if (!rues || rues.length === 0) return null;
+  try { await chargerTurf(); } catch(e) { return null; }
+
+  const points = [];
+  // Limiter à 40 rues max pour ne pas saturer l'API
+  for (const rue of rues.slice(0, 40)) {
+    const coords = await geocoderRue(rue, commune);
+    if (coords) points.push(coords);
+  }
+
+  if (points.length < 3) {
+    if (points.length > 0) {
+      try { return turf.circle(points[0], 0.35, { units:"kilometers", steps:24 }); }
+      catch(e) { return null; }
+    }
+    return null;
+  }
+
+  try {
+    const fc = turf.featureCollection(points.map(p => turf.point(p)));
+    const hull = turf.convex(fc);
+    if (!hull) return null;
+    return turf.buffer(hull, 0.12, { units:"kilometers" }) || hull;
+  } catch (e) {
+    console.warn("Erreur enveloppe convexe", e);
+    return null;
+  }
+}
+
 async function fetchContourCommune(codeInsee) {
   if (_contourCache[codeInsee]) return _contourCache[codeInsee];
   try {
@@ -1030,7 +1096,13 @@ async function afficherSecteursSurCarte(map, secteurs, equipes=[]) {
   const layers=[], bounds=[];
   for (const secteur of secteurs) {
     const codeInsee=COMMUNES_INSEE[secteur.commune]; if(!codeInsee) continue;
-    const geojson=await fetchContourCommune(codeInsee); if(!geojson) continue;
+    // Si le secteur a des rues renseignées, on dessine une zone autour d'elles
+    let geojson = null;
+    if (secteur.rues && secteur.rues.length > 0) {
+      geojson = await calculerZoneApproximative(secteur.rues, secteur.commune);
+    }
+    if (!geojson) geojson = await fetchContourCommune(codeInsee);
+    if (!geojson) continue;
     const couleur=getCouleurEquipe(secteur.equipeId,equipes);
     const layer=L.geoJSON(geojson,{ style:{ color:"#FFFFFF", weight:2, opacity:0.9, fillColor:couleur, fillOpacity:secteur.statut==="termine"?0.65:secteur.statut==="en_cours"?0.5:secteur.equipeId?0.4:0.15 } });
     layer.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:160px;"><strong>${secteur.nom}</strong><br><span style="color:#666">${secteur.commune}</span><br>👥 ${secteur.equipNom||'Non affecté'}<br><strong style="color:#16A34A">${Number(secteur.totalCollecte||0).toLocaleString('fr-FR')} €</strong></div>`);
