@@ -2287,7 +2287,8 @@ async function renderSecteurs() {
   document.getElementById("main").innerHTML = layoutAdmin("#secteurs", `
     <div class="page-header">
       <h1>Secteurs géographiques</h1>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="btn-vider-secteurs" class="btn btn--danger">🗑️ Tout supprimer</button>
         <button id="btn-import-csv" class="btn btn--ghost">📥 Importer CSV</button>
         <button id="btn-add-secteur" class="btn btn--primary">+ Nouveau secteur</button>
       </div>
@@ -2316,6 +2317,33 @@ async function renderSecteurs() {
 
   document.getElementById("btn-import-csv")?.addEventListener("click", () => {
     document.getElementById("input-csv").click();
+  });
+
+  document.getElementById("btn-vider-secteurs")?.addEventListener("click", async () => {
+    const secteurs = await lireSecteurs();
+    if (secteurs.length === 0) { toast("Aucun secteur à supprimer", "info"); return; }
+
+    if (!confirm(
+      `⚠️ SUPPRIMER TOUS LES SECTEURS ?\n\n` +
+      `${secteurs.length} secteur(s) vont être définitivement supprimés.\n` +
+      `Les passages enregistrés ne seront plus rattachés à aucun secteur.\n\n` +
+      `Cette action est IRRÉVERSIBLE.`
+    )) return;
+
+    const saisie = prompt(
+      `Dernière confirmation.\n\nTape SUPPRIMER (en majuscules) pour confirmer la suppression des ${secteurs.length} secteurs :`
+    );
+    if (saisie !== "SUPPRIMER") { toast("Suppression annulée", "info"); return; }
+
+    const btn = document.getElementById("btn-vider-secteurs");
+    setLoading(btn, true);
+    let ok = 0, ko = 0;
+    for (const s of secteurs) {
+      try { await supprimerSecteur(s.id); ok++; }
+      catch(e) { console.error("Erreur suppression", s.nom, e); ko++; }
+    }
+    setLoading(btn, false);
+    toast(`${ok} secteur(s) supprimé(s)${ko ? `, ${ko} erreur(s)` : ''}`, ko ? "error" : "success");
   });
 
   document.getElementById("input-csv")?.addEventListener("change", async (e) => {
@@ -2500,6 +2528,7 @@ async function renderEquipes() {
       <h1>Équipes</h1>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button id="btn-auto-affecter" class="btn btn--ghost">🔗 Affecter par nom</button>
+        <button id="btn-vider-equipes" class="btn btn--danger">🗑️ Tout supprimer</button>
         <button id="btn-import-csv-equipe" class="btn btn--ghost">📥 Importer CSV</button>
         <button id="btn-add-equipe" class="btn btn--primary">+ Nouvelle équipe</button>
       </div>
@@ -2549,6 +2578,33 @@ async function renderEquipes() {
 
   document.getElementById("btn-import-csv-equipe")?.addEventListener("click", () => {
     document.getElementById("input-csv-equipe").click();
+  });
+
+  document.getElementById("btn-vider-equipes")?.addEventListener("click", async () => {
+    const equipes = await lireEquipes();
+    if (equipes.length === 0) { toast("Aucune équipe à supprimer", "info"); return; }
+
+    if (!confirm(
+      `⚠️ SUPPRIMER TOUTES LES ÉQUIPES ?\n\n` +
+      `${equipes.length} équipe(s) vont être définitivement supprimées.\n` +
+      `Les secteurs affectés perdront leur équipe.\n\n` +
+      `Cette action est IRRÉVERSIBLE.`
+    )) return;
+
+    const saisie = prompt(
+      `Dernière confirmation.\n\nTape SUPPRIMER (en majuscules) pour confirmer la suppression des ${equipes.length} équipes :`
+    );
+    if (saisie !== "SUPPRIMER") { toast("Suppression annulée", "info"); return; }
+
+    const btn = document.getElementById("btn-vider-equipes");
+    setLoading(btn, true);
+    let ok = 0, ko = 0;
+    for (const e of equipes) {
+      try { await supprimerEquipe(e.id); ok++; }
+      catch(err) { console.error("Erreur suppression", e.nom, err); ko++; }
+    }
+    setLoading(btn, false);
+    toast(`${ok} équipe(s) supprimée(s)${ko ? `, ${ko} erreur(s)` : ''}`, ko ? "error" : "success");
   });
 
   document.getElementById("input-csv-equipe")?.addEventListener("change", async (e) => {
