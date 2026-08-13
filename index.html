@@ -1072,13 +1072,8 @@ async function calculerZoneApproximative(rues, commune) {
     await new Promise(r => setTimeout(r, 30));
   }
 
-  console.log(`[carte] ${commune} — ${points.length}/${echantillon.length} rues géocodées`);
-
   // Il faut assez de points fiables, sinon on retombe sur le contour communal
-  if (points.length < 4) {
-    console.warn(`[carte] Pas assez de points pour dessiner une zone (${points.length})`);
-    return null;
-  }
+  if (points.length < 4) return null;
 
   try {
     const fc = turf.featureCollection(points.map(p => turf.point(p)));
@@ -1138,13 +1133,8 @@ async function afficherSecteursSurCarte(map, secteurs, equipes=[]) {
 
     let geojson = null;
     const communeDecoupee = nbParCommune[secteur.commune] > 1;
-    if (communeDecoupee) {
-      console.log(`[carte] "${secteur.nom}" — commune découpée, ${(secteur.rues||[]).length} rues en base`);
-    }
     if (communeDecoupee && secteur.rues && secteur.rues.length > 0) {
       geojson = await calculerZoneApproximative(secteur.rues, secteur.commune);
-      if (geojson) console.log(`[carte] ✅ zone calculée pour "${secteur.nom}"`);
-      else console.warn(`[carte] ❌ échec zone pour "${secteur.nom}" → contour communal`);
     }
     if (!geojson) geojson = await fetchContourCommune(codeInsee);
     if (!geojson) continue;
@@ -2113,6 +2103,45 @@ function afficherChoixMembre(equipe, membres) {
 //  LAYOUT ADMIN (shared)
 // ════════════════════════════════════════════════════════════
 
+
+// ── Parser CSV robuste (gère les guillemets et virgules dans les champs) ──
+function parseCSVLine(line) {
+  const out = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i+1] === '"') { cur += '"'; i++; }  // guillemet échappé ""
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map(v => v.trim());
+}
+
+// Découpe le texte CSV en lignes en respectant les sauts de ligne dans les guillemets
+function parseCSV(text) {
+  const lignes = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') { inQuotes = !inQuotes; cur += ch; }
+    else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (cur.trim()) lignes.push(cur);
+      cur = '';
+      if (ch === '\r' && text[i+1] === '\n') i++;
+    } else cur += ch;
+  }
+  if (cur.trim()) lignes.push(cur);
+  return lignes.map(parseCSVLine);
+}
+
 function layoutAdmin(activeHash, content) {
   const nav = [
     { hash: "#dashboard", icon: "📊", label: "Tableau de bord" },
@@ -2467,13 +2496,13 @@ async function renderSecteurs() {
     const file = e.target.files[0];
     if (!file) return;
     const text = await file.text();
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const headers = lines[0].split(',').map(h => h.trim());
+    const rows2d = parseCSV(text);
+    if (rows2d.length < 2) { toast("CSV vide ou illisible", "error"); return; }
+    const headers = rows2d[0];
     let created = 0, errors = 0;
 
-    for (let i = 1; i < lines.length; i++) {
-      // Parse CSV simple (gère les champs vides)
-      const values = lines[i].split(',');
+    for (let i = 1; i < rows2d.length; i++) {
+      const values = rows2d[i];
       const row = {};
       headers.forEach((h, idx) => row[h] = (values[idx] || '').trim());
 
@@ -2728,12 +2757,13 @@ async function renderEquipes() {
     const file = e.target.files[0];
     if (!file) return;
     const text = await file.text();
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const headers = lines[0].split(',').map(h => h.trim());
+    const rows2d = parseCSV(text);
+    if (rows2d.length < 2) { toast("CSV vide ou illisible", "error"); return; }
+    const headers = rows2d[0];
     let created = 0, errors = 0;
 
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',');
+    for (let i = 1; i < rows2d.length; i++) {
+      const values = rows2d[i];
       const row = {};
       headers.forEach((h, idx) => row[h] = (values[idx] || '').trim());
 
