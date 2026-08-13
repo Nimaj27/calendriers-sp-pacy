@@ -1077,10 +1077,24 @@ async function calculerZoneApproximative(rues, commune) {
 
   try {
     const fc = turf.featureCollection(points.map(p => turf.point(p)));
-    const hull = turf.convex(fc);
+
+    // Enveloppe CONCAVE : épouse la forme réelle des rues, réduit fortement
+    // les chevauchements entre secteurs voisins (contrairement à l'enveloppe convexe).
+    // maxEdge = longueur max d'une arête en km ; si trop petit, turf renvoie null,
+    // on réessaie donc en élargissant progressivement.
+    let hull = null;
+    for (const maxEdge of [0.35, 0.6, 1.0, 1.8]) {
+      try {
+        hull = turf.concave(fc, { maxEdge, units: "kilometers" });
+        if (hull) break;
+      } catch(e) { /* on tente la valeur suivante */ }
+    }
+    // Dernier recours : enveloppe convexe
+    if (!hull) hull = turf.convex(fc);
     if (!hull) return null;
 
-    const zone = turf.buffer(hull, 0.12, { units:"kilometers" }) || hull;
+    // Buffer réduit (60 m au lieu de 120) pour limiter les recouvrements
+    const zone = turf.buffer(hull, 0.06, { units:"kilometers" }) || hull;
 
     // Garde-fou : si la zone calculée est démesurée, on la rejette
     const aire = turf.area(zone) / 1e6; // m² → km²
@@ -1139,7 +1153,16 @@ async function afficherSecteursSurCarte(map, secteurs, equipes=[]) {
     if (!geojson) geojson = await fetchContourCommune(codeInsee);
     if (!geojson) continue;
     const couleur=getCouleurEquipe(secteur.equipeId,equipes);
-    const layer=L.geoJSON(geojson,{ style:{ color:"#FFFFFF", weight:2, opacity:0.9, fillColor:couleur, fillOpacity:secteur.statut==="termine"?0.65:secteur.statut==="en_cours"?0.5:secteur.equipeId?0.4:0.15 } });
+    // Communes découpées : bordure colorée + remplissage plus léger pour
+    // que les éventuels chevauchements restent lisibles
+    const style = communeDecoupee
+      ? { color: couleur, weight: 2.5, opacity: 1,
+          fillColor: couleur,
+          fillOpacity: secteur.statut==="termine"?0.45:secteur.statut==="en_cours"?0.35:secteur.equipeId?0.25:0.12 }
+      : { color: "#FFFFFF", weight: 2, opacity: 0.9,
+          fillColor: couleur,
+          fillOpacity: secteur.statut==="termine"?0.65:secteur.statut==="en_cours"?0.5:secteur.equipeId?0.4:0.15 };
+    const layer=L.geoJSON(geojson,{ style });
     layer.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:160px;"><strong>${secteur.nom}</strong><br><span style="color:#666">${secteur.commune}</span><br>👥 ${secteur.equipNom||'Non affecté'}<br><strong style="color:#16A34A">${Number(secteur.totalCollecte||0).toLocaleString('fr-FR')} €</strong></div>`);
     layer.addTo(map); layers.push(layer);
     const b=layer.getBounds(); if(b.isValid()) bounds.push(b);
