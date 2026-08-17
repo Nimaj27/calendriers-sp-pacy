@@ -727,6 +727,128 @@ body {
   font-size: .8rem; cursor: pointer; padding: var(--sp-2);
   text-decoration: underline;
 }
+
+/* ── Relances — vue admin regroupée ─────────────────────────── */
+.relance-secteur {
+  background: var(--blanc); border: 1.5px solid var(--gris-bord);
+  border-left: 4px solid var(--orange); border-radius: var(--r-md);
+  margin-bottom: var(--sp-4); overflow: hidden;
+}
+.relance-secteur-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  background: #FFFBEB; border-bottom: 1px solid var(--ardoise-light);
+  flex-wrap: wrap;
+}
+.relance-commune {
+  font-size: .78rem; color: var(--ardoise-mid); margin-left: var(--sp-2);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.relance-meta { display: flex; align-items: center; gap: var(--sp-3); font-size: .82rem; color: var(--ardoise-mid); }
+.relance-badge {
+  background: var(--orange); color: var(--blanc);
+  padding: 2px 10px; border-radius: 99px; font-weight: 700; font-size: .75rem;
+}
+.relance-rue { padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--gris-fond); }
+.relance-rue:last-child { border-bottom: none; }
+.relance-rue-nom { font-size: .85rem; font-weight: 600; color: var(--ardoise); margin-bottom: var(--sp-2); }
+.relance-numeros { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.relance-num {
+  position: relative;
+  min-width: 42px; padding: var(--sp-2) var(--sp-3);
+  background: var(--jaune-light); border: 1.5px solid var(--jaune);
+  border-radius: var(--r-sm); cursor: pointer;
+  font-family: var(--font); font-size: .88rem; font-weight: 700; color: #78350F;
+  transition: all .12s;
+}
+.relance-num:hover  { background: var(--jaune); color: var(--blanc); }
+.relance-num:active { transform: scale(.94); }
+.relance-vieux {
+  position: absolute; top: -5px; right: -5px;
+  background: var(--rouge); color: var(--blanc);
+  width: 16px; height: 16px; border-radius: 50%;
+  font-size: .65rem; line-height: 16px; text-align: center; font-weight: 900;
+}
+.relance-notes { font-size: .75rem; color: var(--ardoise-mid); margin-top: var(--sp-2); font-style: italic; }
+.relance-aide { font-size: .8rem; color: var(--ardoise-mid); margin-top: var(--sp-4); line-height: 1.5; }
+
+/* ── Relances — vue terrain équipier ───────────────────────── */
+.terrain-relances {
+  margin: 0 var(--sp-4) var(--sp-4);
+  background: #FFFBEB; border: 1.5px solid var(--jaune);
+  border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4);
+}
+.terrain-relances-head {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: .88rem; font-weight: 700; color: #92400E;
+  margin-bottom: var(--sp-3);
+}
+.terrain-relances-count {
+  background: var(--orange); color: var(--blanc);
+  padding: 1px 8px; border-radius: 99px; font-size: .75rem;
+}
+.terrain-relances-liste { display: flex; flex-direction: column; gap: var(--sp-2); }
+.terrain-relance-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3); width: 100%;
+  padding: var(--sp-3); background: var(--blanc);
+  border: 1.5px solid var(--jaune); border-radius: var(--r-sm);
+  cursor: pointer; font-family: var(--font); text-align: left;
+  transition: all .12s;
+}
+.terrain-relance-item:active { transform: scale(.98); background: var(--jaune-light); }
+.terrain-relance-adr { font-size: .88rem; font-weight: 600; color: var(--ardoise); }
+.terrain-relance-jours {
+  font-size: .72rem; font-weight: 700; color: #92400E;
+  background: var(--jaune-light); padding: 2px 7px; border-radius: 99px;
+  flex-shrink: 0;
+}
+.terrain-relances-aide { font-size: .72rem; color: var(--ardoise-mid); margin-top: var(--sp-2); font-style: italic; }
+
+/* ── Relances côté terrain équipier ─────────────────────────── */
+.terrain-relances-wrap {
+  margin: 0 var(--sp-4) var(--sp-3);
+  background: #FFFBEB; border: 1.5px solid var(--jaune);
+  border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4);
+}
+.terrain-relances-head {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: .9rem; font-weight: 700; color: #92400E;
+  margin-bottom: var(--sp-3);
+}
+.terrain-relances-count {
+  background: var(--jaune); color: #78350F;
+  font-size: .75rem; font-weight: 700;
+  padding: 1px 8px; border-radius: 99px;
+}
+.terrain-relance-secteur { margin-bottom: var(--sp-3); }
+.terrain-relance-secteur:last-of-type { margin-bottom: 0; }
+.terrain-relance-secteur-nom {
+  font-size: .78rem; font-weight: 700; color: var(--ardoise-mid);
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: var(--sp-2);
+}
+.terrain-relance-rue {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  flex-wrap: wrap; margin-bottom: var(--sp-2);
+}
+.terrain-relance-rue-nom {
+  font-size: .85rem; color: var(--ardoise); flex: 1 1 100%;
+}
+.terrain-relance-nums { display: flex; flex-wrap: wrap; gap: 4px; }
+.terrain-relance-num {
+  min-width: 36px; padding: 5px 8px;
+  background: var(--blanc); border: 1.5px solid var(--jaune);
+  border-radius: var(--r-sm); cursor: pointer;
+  font-family: var(--font); font-size: .82rem; font-weight: 700;
+  color: #92400E; transition: all .12s;
+}
+.terrain-relance-num:hover  { background: var(--jaune); color: var(--blanc); }
+.terrain-relance-num:active { transform: scale(.92); }
+.terrain-relance-aide {
+  font-size: .72rem; color: var(--ardoise-mid); font-style: italic;
+  margin-top: var(--sp-2); padding-top: var(--sp-2);
+  border-top: 1px solid rgba(234,179,8,.3);
+}
 </style>
 </head>
 <body>
@@ -849,6 +971,9 @@ async function desaffecterEquipe(secteurId) {
 async function cloturerSecteur(id) { return fsUpdate(COLLECTIONS.SECTEURS, id, { statut: STATUT_SECTEUR.TERMINE, dateFin: new Date().toISOString() }); }
 async function demarrerSecteur(id) { return fsUpdate(COLLECTIONS.SECTEURS, id, { statut: STATUT_SECTEUR.EN_COURS, dateDebut: new Date().toISOString() }); }
 async function lireSecteurs() { return fsGetAll(COLLECTIONS.SECTEURS); }
+async function secteursParEquipe(equipeId) {
+  return fsQuery(COLLECTIONS.SECTEURS, where("equipeId", "==", equipeId));
+}
 async function lireSecteur(id) { return fsGet(COLLECTIONS.SECTEURS, id); }
 function ecouterSecteurs(callback) {
   return fsListen(COLLECTIONS.SECTEURS, (secteurs) => {
@@ -3172,42 +3297,230 @@ async function renderRelances() {
   stopUnsubs();
 
   document.getElementById("main").innerHTML = layoutAdmin("#relances", `
-    <div class="page-header"><h1>Foyers à relancer</h1></div>
+    <div class="page-header">
+      <h1>🔔 Foyers à relancer</h1>
+      <button id="btn-export-relances" class="btn btn--ghost">📄 Feuille de relance</button>
+    </div>
     <div id="relances-list"><div class="loader">Chargement…</div></div>
+    <div id="modal-relance" class="modal hidden"></div>
   `);
   bindLogout();
 
-  const passages  = await foyersARelancer();
-  const secteurs  = await lireSecteurs();
-  const secteurMap = Object.fromEntries(secteurs.map(s => [s.id, s]));
+  await chargerRelances();
 
+  document.getElementById("btn-export-relances")?.addEventListener("click", async () => {
+    const btn = document.getElementById("btn-export-relances");
+    setLoading(btn, true);
+    try {
+      const [passages, secteurs] = await Promise.all([foyersARelancer(), lireSecteurs()]);
+      const sm = Object.fromEntries(secteurs.map(s => [s.id, s]));
+      let csv = "FEUILLE DE RELANCE — " + new Date().toLocaleDateString("fr-FR") + "\n\n";
+      csv += "Secteur;Commune;Rue;Numéros;Équipe;Note\n";
+      const groupes = grouperRelances(passages, sm);
+      for (const g of groupes) {
+        for (const r of g.rues) {
+          csv += `"${g.secteur}";"${g.commune}";"${r.rue}";"${r.numeros.join(', ')}";"${g.equipe}";"${r.notes.join(' | ')}"\n`;
+        }
+      }
+      telechargerCSV(csv, `relances-${new Date().toISOString().slice(0,10)}.csv`);
+      toast("Feuille de relance téléchargée", "success");
+    } catch(e) { toast("Erreur : " + e.message, "error"); }
+    setLoading(btn, false);
+  });
+}
+
+// Regroupe les passages à relancer par secteur puis par rue
+function grouperRelances(passages, secteurMap) {
+  const parSecteur = {};
+  for (const p of passages) {
+    const s = secteurMap[p.secteurId] || {};
+    const cle = p.secteurId || 'inconnu';
+    if (!parSecteur[cle]) {
+      parSecteur[cle] = {
+        secteurId: p.secteurId,
+        secteur: s.nom || 'Secteur inconnu',
+        commune: s.commune || '',
+        equipe: p.equipeNom || s.equipNom || '—',
+        rues: {}, total: 0
+      };
+    }
+    const g = parSecteur[cle];
+    // Extraire la rue de l'adresse (« 12 Rue de la Mairie » → « Rue de la Mairie »)
+    const adr = (p.adresse || '').trim();
+    const m = adr.match(/^(\d+\s*[a-zA-Z]?)\s+(.+)$/);
+    const numero = m ? m[1].trim() : (adr || '?');
+    const rue    = m ? m[2].trim() : (adr ? '(rue non précisée)' : '(adresse non précisée)');
+
+    if (!g.rues[rue]) g.rues[rue] = { rue, numeros: [], notes: [], passages: [] };
+    g.rues[rue].numeros.push(numero);
+    if (p.note) g.rues[rue].notes.push(p.note);
+    g.rues[rue].passages.push(p);
+    g.total++;
+  }
+  return Object.values(parSecteur)
+    .map(g => ({
+      ...g,
+      rues: Object.values(g.rues).sort((a,b) => a.rue.localeCompare(b.rue))
+                 .map(r => ({ ...r,
+                   numeros: r.numeros.sort((a,b) => (parseInt(a)||9999)-(parseInt(b)||9999)) }))
+    }))
+    .sort((a,b) => b.total - a.total);
+}
+
+async function chargerRelances() {
   const list = document.getElementById("relances-list");
   if (!list) return;
+  list.innerHTML = `<div class="loader">Chargement…</div>`;
+
+  const [passages, secteurs] = await Promise.all([foyersARelancer(), lireSecteurs()]);
+  const secteurMap = Object.fromEntries(secteurs.map(s => [s.id, s]));
+
   if (passages.length === 0) {
     list.innerHTML = `<p class="empty-state">🎉 Aucun foyer à relancer !</p>`;
     return;
   }
+
+  const groupes = grouperRelances(passages, secteurMap);
+  const maintenant = Date.now();
+
   list.innerHTML = `
-    <p class="relances-count">${passages.length} foyer(s) à relancer</p>
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>Équipe</th><th>Secteur</th><th>Commune</th><th>Adresse</th><th>Note</th></tr></thead>
-        <tbody>
-          ${passages.map(p => {
-            const s = secteurMap[p.secteurId] || {};
-            return `<tr>
-              <td>${p.equipeNom || '—'}</td>
-              <td>${s.nom || '—'}</td>
-              <td>${s.commune || '—'}</td>
-              <td>${p.adresse || '—'}</td>
-              <td>${p.note || '—'}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
+    <p class="relances-count">${passages.length} foyer(s) à relancer · ${groupes.length} secteur(s) concerné(s)</p>
+    ${groupes.map(g => `
+      <div class="relance-secteur">
+        <div class="relance-secteur-head">
+          <div>
+            <strong>${g.secteur}</strong>
+            <span class="relance-commune">${g.commune}</span>
+          </div>
+          <div class="relance-meta">
+            <span>👥 ${g.equipe}</span>
+            <span class="relance-badge">${g.total} foyer${g.total>1?'s':''}</span>
+          </div>
+        </div>
+        ${g.rues.map(r => `
+          <div class="relance-rue">
+            <div class="relance-rue-nom">${r.rue}</div>
+            <div class="relance-numeros">
+              ${r.passages.map(p => {
+                const j = p.datePassage ? Math.floor((maintenant - new Date(p.datePassage).getTime())/86400000) : null;
+                const adr = (p.adresse||'').trim();
+                const m = adr.match(/^(\d+\s*[a-zA-Z]?)\s+/);
+                const num = m ? m[1].trim() : (adr || '?');
+                return `<button class="relance-num" title="${adr}${j!==null?` — absent depuis ${j} j`:''}${p.note?` — ${p.note}`:''}"
+                          onclick="traiterRelance('${p.id}','${p.secteurId}')">
+                          ${num}${j !== null && j >= 7 ? '<span class="relance-vieux">!</span>' : ''}
+                        </button>`;
+              }).join('')}
+            </div>
+            ${r.notes.length ? `<div class="relance-notes">📝 ${r.notes.join(' · ')}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `).join('')}
+    <p class="relance-aide">Touche un numéro pour enregistrer le résultat de la relance. Le <strong>!</strong> signale une absence de plus de 7 jours.</p>
   `;
 }
+
+// Traiter une relance : don, refus, ou toujours absent
+window.traiterRelance = async (passageId, secteurId) => {
+  const passages = await passagesDuSecteur(secteurId);
+  const p = passages.find(x => x.id === passageId);
+  if (!p) { toast("Passage introuvable", "error"); return; }
+
+  const modal = document.getElementById("modal-relance");
+  modal.innerHTML = `
+    <div class="modal-inner">
+      <h2>Résultat de la relance</h2>
+      <p class="login-hint">${p.adresse || '(adresse non précisée)'}${p.note ? ` — ${p.note}` : ''}</p>
+
+      <div class="passage-statuts" style="margin:16px 0;">
+        <button class="statut-btn statut-btn--don" onclick="rlSelect('don')" data-rl="don">💰 Don</button>
+        <button class="statut-btn statut-btn--refuse" onclick="rlSelect('refuse')" data-rl="refuse">🚫 Refus</button>
+        <button class="statut-btn statut-btn--absent statut-btn--selected" onclick="rlSelect('absent')" data-rl="absent">🔔 Encore absent</button>
+      </div>
+
+      <div id="rl-don" class="don-details hidden">
+        <label class="label">Montant (€)</label>
+        <input id="rl-montant" class="input input--montant" type="number" min="0" step="0.50" placeholder="0">
+        <div class="mode-paiement">
+          <button class="mode-btn mode-btn--active" data-rl-mode="especes" onclick="rlMode('especes')">💵 Espèces</button>
+          <button class="mode-btn" data-rl-mode="cheque" onclick="rlMode('cheque')">📝 Chèque</button>
+          <button class="mode-btn" data-rl-mode="carte" onclick="rlMode('carte')">💳 Carte</button>
+        </div>
+      </div>
+
+      <div id="rl-absent" class="absent-details">
+        <label class="checkbox-label">
+          <input type="checkbox" id="rl-encore" checked> Garder dans la liste des relances
+        </label>
+      </div>
+
+      <label class="label">Note</label>
+      <input id="rl-note" class="input" value="${(p.note||'').replace(/"/g,'&quot;')}" placeholder="Optionnel">
+
+      <div class="modal-actions">
+        <button id="rl-save" class="btn btn--primary">💾 Enregistrer</button>
+        <button class="btn btn--ghost" onclick="document.getElementById('modal-relance').classList.add('hidden')">Annuler</button>
+      </div>
+    </div>
+  `;
+  modal.classList.remove("hidden");
+  window._rlStatut = "absent";
+  window._rlMode = "especes";
+
+  document.getElementById("rl-save")?.addEventListener("click", async () => {
+    const btn = document.getElementById("rl-save");
+    setLoading(btn, true);
+    try {
+      const st = window._rlStatut;
+      const montant = parseFloat(document.getElementById("rl-montant")?.value || "0");
+      const note = document.getElementById("rl-note").value.trim();
+      const encore = document.getElementById("rl-encore")?.checked;
+
+      if (st === "don" && (!montant || montant <= 0)) {
+        toast("Saisis le montant", "error"); setLoading(btn, false); return;
+      }
+
+      await modifierPassage(passageId, {
+        statut: st === "absent" && encore ? "relance" : st,
+        montant: st === "don" ? Number(montant) : 0,
+        modePaiement: st === "don" ? window._rlMode : null,
+        note,
+        aRelancer: st === "absent" && encore,
+        secteurId
+      });
+
+      toast(st === "don" ? `Don de ${formatMontant(montant)} enregistré ✅`
+            : st === "refuse" ? "Refus enregistré" : "Relance mise à jour", "success");
+      document.getElementById("modal-relance")?.classList.add("hidden");
+      // Rafraîchir la bonne vue selon le contexte
+      if (document.getElementById("relances-list")) {
+        await chargerRelances();
+      } else if (document.getElementById("terrain-relances")) {
+        const mesSecteurs = await secteursParEquipe(APP.equipeId);
+        await chargerRelancesEquipe(mesSecteurs);
+      }
+    } catch(e) {
+      toast("Erreur : " + e.message, "error");
+      setLoading(btn, false);
+    }
+  });
+};
+
+window.rlSelect = (st) => {
+  window._rlStatut = st;
+  document.querySelectorAll("[data-rl]").forEach(b =>
+    b.classList.toggle("statut-btn--selected", b.dataset.rl === st));
+  const d = document.getElementById("rl-don"), a = document.getElementById("rl-absent");
+  d && (st === "don" ? d.classList.remove("hidden") : d.classList.add("hidden"));
+  a && (st === "absent" ? a.classList.remove("hidden") : a.classList.add("hidden"));
+};
+
+window.rlMode = (m) => {
+  window._rlMode = m;
+  document.querySelectorAll("[data-rl-mode]").forEach(b =>
+    b.classList.toggle("mode-btn--active", b.dataset.rlMode === m));
+};
 
 // ════════════════════════════════════════════════════════════
 //  HISTORIQUE MULTI-ANNÉES
@@ -3682,8 +3995,68 @@ async function renderTerrain() {
     naviguer("#login");
   });
 
-  const unsub = ecouterSecteursEquipe(APP.equipeId, renderTerrainSecteurs);
+  const unsub = ecouterSecteursEquipe(APP.equipeId, (secteurs) => {
+    renderTerrainSecteurs(secteurs);
+    chargerRelancesEquipe(secteurs);
+  });
   APP.unsubs.push(unsub);
+}
+
+// ── Bloc « Mes foyers à relancer » sur la vue terrain ──
+async function chargerRelancesEquipe(secteurs) {
+  const box = document.getElementById("terrain-relances");
+  if (!box) return;
+  try {
+    const tous = await foyersARelancer();
+    const mesSecteurs = new Set(secteurs.map(s => s.id));
+    const miens = tous.filter(p => mesSecteurs.has(p.secteurId));
+    if (miens.length === 0) { box.innerHTML = ''; return; }
+
+    const secteurMap = Object.fromEntries(secteurs.map(s => [s.id, s]));
+    const maintenant = Date.now();
+
+    // Grouper par secteur puis par rue
+    const parSecteur = {};
+    for (const p of miens) {
+      const sid = p.secteurId;
+      if (!parSecteur[sid]) parSecteur[sid] = { nom: (secteurMap[sid]||{}).nom || '?', rues: {} };
+      const adr = (p.adresse || '').trim();
+      const m = adr.match(/^(\d+\s*[a-zA-Z]?)\s+(.*)$/);
+      const rue = m ? m[2].trim() : (adr || 'Adresse non précisée');
+      const num = m ? m[1].trim() : (adr || '?');
+      if (!parSecteur[sid].rues[rue]) parSecteur[sid].rues[rue] = [];
+      const j = p.datePassage ? Math.floor((maintenant - new Date(p.datePassage).getTime())/86400000) : null;
+      parSecteur[sid].rues[rue].push({ num, id: p.id, sid, jours: j, note: p.note || '' });
+    }
+
+    box.innerHTML = `
+      <div class="terrain-relances-wrap">
+        <div class="terrain-relances-head">
+          🔔 Mes foyers à relancer
+          <span class="terrain-relances-count">${miens.length}</span>
+        </div>
+        ${Object.values(parSecteur).map(s => `
+          <div class="terrain-relance-secteur">
+            <div class="terrain-relance-secteur-nom">${s.nom}</div>
+            ${Object.entries(s.rues).map(([rue, nums]) => `
+              <div class="terrain-relance-rue">
+                <span class="terrain-relance-rue-nom">${rue}</span>
+                <span class="terrain-relance-nums">
+                  ${nums.map(n => `<button class="terrain-relance-num"
+                      title="${n.jours !== null ? `absent depuis ${n.jours} j` : ''}${n.note ? ' — '+n.note : ''}"
+                      onclick="traiterRelance('${n.id}','${n.sid}')">${n.num}${n.jours !== null && n.jours >= 7 ? '!' : ''}</button>`).join('')}
+                </span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+        <div class="terrain-relance-aide">Touche un numéro quand tu y repasses pour enregistrer le résultat.</div>
+      </div>
+    `;
+  } catch(e) {
+    console.warn("Relances équipe:", e);
+    box.innerHTML = '';
+  }
 }
 
 function renderTerrainSecteurs(secteurs) {
@@ -3709,6 +4082,7 @@ function renderTerrainSecteurs(secteurs) {
       </div>
       <div style="font-size:.78rem;color:var(--ardoise-mid);margin-top:6px;">${nbTermines} / ${nbTotal} secteur(s) terminé(s)</div>
     </div>
+    <div id="terrain-relances"></div>
     <div class="terrain-secteurs">
       ${secteurs.map(s => `
         <div class="terrain-secteur-card" onclick="naviguerTerrain('${s.id}')">
@@ -3807,6 +4181,9 @@ async function renderTerrainPassages() {
         <input id="p-note" class="input" placeholder="Note (optionnel)">
         <button id="btn-saisir" class="btn btn--primary btn--full" disabled>Enregistrer le passage</button>
       </div>
+
+      <!-- Foyers à relancer sur ce secteur -->
+      <div id="terrain-relances" class="terrain-relances hidden"></div>
 
       <!-- Liste des passages du secteur -->
       <div class="passages-terrain">
@@ -4035,6 +4412,36 @@ async function renderTerrainPassages() {
 
   // Écoute temps réel
   const unsub = ecouterPassagesSecteur(secteurId, (passages) => {
+    // ── Bloc « Mes foyers à relancer » sur ce secteur ──
+    const boxRel = document.getElementById("terrain-relances");
+    if (boxRel) {
+      const aRelancer = passages.filter(p => p.aRelancer);
+      if (aRelancer.length === 0) {
+        boxRel.classList.add("hidden");
+      } else {
+        boxRel.classList.remove("hidden");
+        const maintenant = Date.now();
+        boxRel.innerHTML = `
+          <div class="terrain-relances-head">
+            🔔 À relancer sur ce secteur
+            <span class="terrain-relances-count">${aRelancer.length}</span>
+          </div>
+          <div class="terrain-relances-liste">
+            ${aRelancer
+              .sort((a,b) => (a.adresse||'').localeCompare(b.adresse||'', 'fr', {numeric:true}))
+              .map(p => {
+                const j = p.datePassage ? Math.floor((maintenant - new Date(p.datePassage).getTime())/86400000) : null;
+                return `<button class="terrain-relance-item" onclick="corrigerPassage('${p.id}','${secteurId}')">
+                  <span class="terrain-relance-adr">${p.adresse || '(sans adresse)'}</span>
+                  ${j !== null ? `<span class="terrain-relance-jours">${j} j</span>` : ''}
+                </button>`;
+              }).join('')}
+          </div>
+          <div class="terrain-relances-aide">Touche une adresse pour mettre à jour après ton passage.</div>
+        `;
+      }
+    }
+
     const list = document.getElementById("passages-terrain-list");
     if (!list) return;
     if (passages.length === 0) { list.innerHTML = `<p class="empty-state">Aucun passage encore.</p>`; return; }
