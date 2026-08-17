@@ -1128,6 +1128,44 @@ body {
 .mr-ajouter:hover { border-color: var(--bleu); color: var(--bleu); background: var(--bleu-light); }
 .mr-num--ajout { border-style: dashed; }
 .mr-num--ajout.mr-num--fait { border-style: solid; box-shadow: 0 0 0 2px rgba(37,99,235,.25); }
+
+/* ── Fusion d'adresses & inhabitée ──────────────────────────── */
+.mr-num--inhab {
+  background: repeating-linear-gradient(45deg, #f4f5f9, #f4f5f9 4px, #e5e7eb 4px, #e5e7eb 8px) !important;
+  color: var(--ardoise-mid) !important;
+  border-color: var(--gris-bord) !important;
+  text-decoration: line-through;
+  opacity: .75;
+}
+.mr-num sup {
+  font-size: .58rem; font-weight: 800;
+  vertical-align: super; margin-left: 1px;
+}
+.mn-fusion, .mn-inhab {
+  font-size: .78rem; line-height: 1.45;
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm);
+  margin-bottom: var(--sp-3);
+}
+.mn-fusion { background: var(--bleu-light); color: var(--bleu); }
+.mn-inhab  { background: var(--gris-fond); color: var(--ardoise-mid); }
+.mn-lien {
+  background: none; border: none; cursor: pointer;
+  font-family: var(--font); font-size: .72rem; font-weight: 700;
+  text-decoration: underline; color: inherit; padding: 0 0 0 4px;
+}
+.mn-outils {
+  display: flex; gap: var(--sp-2); flex-wrap: wrap;
+  margin-bottom: var(--sp-3); padding-top: var(--sp-2);
+  border-top: 1px solid var(--ardoise-light);
+}
+.mn-outil {
+  flex: 1 1 auto; padding: var(--sp-2) var(--sp-3);
+  background: var(--gris-fond); border: 1.5px solid var(--gris-bord);
+  border-radius: var(--r-sm); cursor: pointer;
+  font-family: var(--font); font-size: .76rem; font-weight: 600;
+  color: var(--ardoise-mid); white-space: nowrap;
+}
+.mn-outil:hover { border-color: var(--bleu); color: var(--bleu); background: var(--bleu-light); }
 </style>
 </head>
 <body>
@@ -1329,6 +1367,80 @@ async function retirerComplement(secteurId, rue, numero) {
 function lireComplements(secteur, rue) {
   if (!secteur || !secteur.ruesComplements) return [];
   return secteur.ruesComplements[normRue(rue)] || [];
+}
+
+// ── Fusions d'adresses (une seule boîte pour plusieurs adresses) ──
+// Format : [{ principale: "11 Rue du Moulin", secondaires: ["13 Rue du Moulin", "2 Rue des Soupirs"] }]
+// Définitives : conservées d'une tournée à l'autre.
+
+async function fusionnerAdresses(secteurId, principale, secondaires) {
+  const secteur = await fsGet(COLLECTIONS.SECTEURS, secteurId);
+  if (!secteur) throw new Error("Secteur introuvable");
+  const fusions = secteur.fusions || [];
+
+  const norm = s => (s||'').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+
+  // Retirer ces adresses d'éventuelles fusions existantes
+  const toutes = [principale, ...secondaires].map(norm);
+  let nettoyees = fusions
+    .filter(f => !toutes.includes(norm(f.principale)))
+    .map(f => ({
+      ...f,
+      secondaires: (f.secondaires||[]).filter(s => !toutes.includes(norm(s)))
+    }))
+    .filter(f => f.secondaires.length > 0);
+
+  nettoyees.push({ principale, secondaires: [...new Set(secondaires)] });
+  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, { fusions: nettoyees });
+  return nettoyees.length;
+}
+
+async function annulerFusion(secteurId, principale) {
+  const secteur = await fsGet(COLLECTIONS.SECTEURS, secteurId);
+  if (!secteur) throw new Error("Secteur introuvable");
+  const norm = s => (s||'').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const fusions = (secteur.fusions || []).filter(f => norm(f.principale) !== norm(principale));
+  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, { fusions });
+}
+
+// Renvoie la liste plate de toutes les adresses secondaires (à masquer des grilles)
+function adressesSecondaires(secteur) {
+  if (!secteur || !secteur.fusions) return [];
+  return secteur.fusions.flatMap(f => f.secondaires || []);
+}
+
+// Trouve la fusion dont fait partie une adresse (comme principale ou secondaire)
+function trouverFusion(secteur, adresse) {
+  if (!secteur || !secteur.fusions) return null;
+  const norm = s => (s||'').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const a = norm(adresse);
+  return secteur.fusions.find(f =>
+    norm(f.principale) === a || (f.secondaires||[]).some(s => norm(s) === a)) || null;
+}
+
+// ── Adresses marquées inhabitées (retirées du décompte, définitif) ──
+async function marquerInhabitee(secteurId, adresse, inhabitee = true) {
+  const secteur = await fsGet(COLLECTIONS.SECTEURS, secteurId);
+  if (!secteur) throw new Error("Secteur introuvable");
+  const norm = s => (s||'').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  let liste = secteur.inhabitees || [];
+  if (inhabitee) {
+    if (!liste.some(x => norm(x) === norm(adresse))) liste.push(adresse);
+  } else {
+    liste = liste.filter(x => norm(x) !== norm(adresse));
+  }
+  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, { inhabitees: liste });
+}
+
+function estInhabitee(secteur, adresse) {
+  if (!secteur || !secteur.inhabitees) return false;
+  const norm = s => (s||'').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  return secteur.inhabitees.some(x => norm(x) === norm(adresse));
 }
 
 // tournee.js — Logique métier tournée calendriers
@@ -5094,7 +5206,13 @@ function majStatsTerrain(secteur, passages) {
   const box = document.getElementById("terrain-stats");
   if (!box) return;
 
-  const totalBoites = nbFoyersSecteur(secteur);
+  // Total de boîtes = BAN + compléments manuels − adresses fusionnées − inhabitées
+  let totalBoites = nbFoyersSecteur(secteur);
+  const comp = secteur.ruesComplements || {};
+  totalBoites += Object.values(comp).reduce((s, arr) => s + (arr || []).length, 0);
+  totalBoites -= adressesSecondaires(secteur).length;
+  totalBoites -= (secteur.inhabitees || []).length;
+  totalBoites = Math.max(0, totalBoites);
   const aujourdhui = new Date().toISOString().slice(0, 10);
 
   // Traités = dons + refus (les absents restent « à faire »)
@@ -5393,8 +5511,14 @@ function majModeRue(secteur, passages) {
     })
     .map(p => p.adresse.trim().match(/^(\S+)\s+/)[1]);
 
-  // Fusionner : BAN + ajouts manuels + numéros déjà saisis
+  // Adresses masquées (fusionnées en secondaire) et inhabitées
+  const normA = s => normAdr(s);
+  const secondaires = new Set(adressesSecondaires(secteur).map(normA));
+  const inhab = new Set((secteur.inhabitees || []).map(normA));
+
+  // Fusionner : BAN + ajouts manuels + numéros déjà saisis, moins les secondaires
   const tousNums = [...new Set([...numeros, ...ajouts, ...depuisPassages])]
+    .filter(n => !secondaires.has(normA(`${n} ${rueActive}`)))
     .sort((a, b) => {
       const na = parseInt(a), nb = parseInt(b);
       if (isNaN(na) && isNaN(nb)) return String(a).localeCompare(String(b));
@@ -5409,8 +5533,9 @@ function majModeRue(secteur, passages) {
     const p = passages.find(x => normAdr(x.adresse) === normAdr(`${n} ${rueActive}`));
     if (p) statuts[n] = p.statut;
   }
-  const faits = Object.keys(statuts).length;
-  const pct = tousNums.length ? Math.round((faits / tousNums.length) * 100) : 0;
+  const aFaire = tousNums.filter(n => !inhab.has(normA(`${n} ${rueActive}`)));
+  const faits = Object.keys(statuts).filter(n => !inhab.has(normA(`${n} ${rueActive}`))).length;
+  const pct = aFaire.length ? Math.round((faits / aFaire.length) * 100) : 0;
 
   // Séparer pairs et impairs (les deux trottoirs)
   const impairs = tousNums.filter(n => (parseInt(n) % 2) === 1);
@@ -5425,10 +5550,14 @@ function majModeRue(secteur, passages) {
           const st = statuts[n];
           const c = st ? COULEURS_STATUT_NUM[st] : null;
           const aj = ajouts.includes(n);
-          return `<button class="mr-num ${st ? 'mr-num--fait' : ''} ${aj ? 'mr-num--ajout' : ''}"
-            style="${c ? `background:${c.bg};border-color:${c.bg};color:#fff` : ''}"
-            title="${c ? c.label : 'Non visité'}${aj ? ' — ajouté manuellement' : ''}"
-            onclick="saisirNumero('${n}','${rueActive.replace(/'/g,"\\'")}')">${n}</button>`;
+          const adrN = `${n} ${rueActive}`;
+          const inh = inhab.has(normA(adrN));
+          const fus = trouverFusion(secteur, adrN);
+          const nbFus = fus ? (fus.secondaires || []).length : 0;
+          return `<button class="mr-num ${st ? 'mr-num--fait' : ''} ${aj ? 'mr-num--ajout' : ''} ${inh ? 'mr-num--inhab' : ''}"
+            style="${inh ? '' : c ? `background:${c.bg};border-color:${c.bg};color:#fff` : ''}"
+            title="${inh ? 'Inhabitée' : c ? c.label : 'Non visité'}${aj ? ' — ajouté' : ''}${nbFus ? ` — regroupe ${nbFus+1} adresses` : ''}"
+            onclick="saisirNumero('${n}','${rueActive.replace(/'/g,"\\'")}')">${n}${nbFus ? `<sup>+${nbFus}</sup>` : ''}</button>`;
         }).join('')}
       </div>
     </div>`;
@@ -5438,7 +5567,7 @@ function majModeRue(secteur, passages) {
       <div class="mr-grille-head">
         <div>
           <div class="mr-grille-rue">${rueActive}</div>
-          <div class="mr-grille-prog">${faits} / ${tousNums.length} traités · ${pct}%${ajouts.length ? ` · ${ajouts.length} ajouté${ajouts.length>1?'s':''}` : ''}</div>
+          <div class="mr-grille-prog">${faits} / ${aFaire.length} traités · ${pct}%${ajouts.length ? ` · ${ajouts.length} ajouté${ajouts.length>1?'s':''}` : ''}</div>
         </div>
         <button class="mr-quitter" onclick="quitterRue()">Changer de rue</button>
       </div>
@@ -5543,6 +5672,8 @@ window.saisirNumero = async (numero, rue) => {
 
   // Ce numéro vient-il d'un ajout manuel ?
   const estAjout = lireComplements(secteur, rue).includes(numero);
+  const fusion = trouverFusion(secteur, adresse);
+  const inhabitee = estInhabitee(secteur, adresse);
 
   let modal = document.getElementById("modal-num");
   if (!modal) {
@@ -5555,11 +5686,19 @@ window.saisirNumero = async (numero, rue) => {
     <div class="modal-inner mn-modal">
       <h2>${adresse}</h2>
       ${existant ? `<p class="mn-existant">Déjà enregistré : <strong>${STATUT_PASSAGE_LABEL[existant.statut]}</strong>${existant.statut==='don'?` (${formatMontant(existant.montant)})`:''}</p>` : ''}
+      ${fusion ? `<p class="mn-fusion">🔗 Regroupe : ${[fusion.principale, ...(fusion.secondaires||[])].join(' + ')}
+        <button class="mn-lien" onclick="mnAnnulerFusion('${fusion.principale.replace(/'/g,"\\'")}')">séparer</button></p>` : ''}
+      ${inhabitee ? `<p class="mn-inhab">🏚️ Marquée inhabitée — hors décompte
+        <button class="mn-lien" onclick="mnInhabitee(false)">remettre</button></p>` : ''}
       <div class="mn-statuts">
         <button class="mn-btn mn-btn--don" onclick="mnChoisir('don')">💰 Don</button>
         <button class="mn-btn mn-btn--offert" onclick="mnChoisir('offert')">🎁 Offert</button>
         <button class="mn-btn mn-btn--refuse" onclick="mnChoisir('refuse')">🚫 Refus</button>
         <button class="mn-btn mn-btn--absent" onclick="mnChoisir('absent')">🔔 Absent</button>
+      </div>
+      <div class="mn-outils">
+        ${!inhabitee ? `<button class="mn-outil" onclick="mnInhabitee(true)">🏚️ Inhabitée</button>` : ''}
+        <button class="mn-outil" onclick="mnFusionner()">🔗 Même boîte que…</button>
       </div>
       <div id="mn-montant-box" class="hidden">
         <label class="label">Montant (€)</label>
@@ -5614,6 +5753,59 @@ window.saisirNumero = async (numero, rue) => {
       setLoading(btn, false);
     }
   });
+};
+
+
+// Marque l'adresse courante comme inhabitée (ou annule)
+window.mnInhabitee = async (valeur) => {
+  const ctx = window._mnCtx;
+  if (!ctx) return;
+  try {
+    await marquerInhabitee(ctx.secteurId, ctx.adresse, valeur);
+    document.getElementById("modal-num")?.classList.add("hidden");
+    toast(valeur ? `${ctx.adresse} marquée inhabitée` : "Remise dans le décompte", "success");
+    rafraichirModeRue();
+  } catch(e) { toast("Erreur : " + e.message, "error"); }
+};
+
+// Fusionne l'adresse courante avec d'autres (même boîte aux lettres)
+window.mnFusionner = async () => {
+  const ctx = window._mnCtx;
+  if (!ctx) return;
+
+  const v = prompt(
+    `Regrouper avec « ${ctx.adresse} »\n\n` +
+    `Saisis les autres adresses qui partagent la même boîte aux lettres.\n` +
+    `Une par ligne ou séparées par des virgules.\n\n` +
+    `Exemples :\n` +
+    `  13 Rue du Moulin\n` +
+    `  2 Rue des Soupirs\n\n` +
+    `Ces adresses disparaîtront des grilles (regroupement définitif, modifiable).`
+  );
+  if (!v || !v.trim()) return;
+
+  const secondaires = v.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+  if (secondaires.length === 0) return;
+
+  try {
+    await fusionnerAdresses(ctx.secteurId, ctx.adresse, secondaires);
+    document.getElementById("modal-num")?.classList.add("hidden");
+    toast(`${secondaires.length + 1} adresses regroupées ✅`, "success");
+    rafraichirModeRue();
+  } catch(e) { toast("Erreur : " + e.message, "error"); }
+};
+
+// Annule un regroupement
+window.mnAnnulerFusion = async (principale) => {
+  const ctx = window._mnCtx;
+  if (!ctx) return;
+  if (!confirm(`Séparer les adresses regroupées avec « ${principale} » ?`)) return;
+  try {
+    await annulerFusion(ctx.secteurId, principale);
+    document.getElementById("modal-num")?.classList.add("hidden");
+    toast("Adresses séparées", "success");
+    rafraichirModeRue();
+  } catch(e) { toast("Erreur : " + e.message, "error"); }
 };
 
 window.mnChoisir = (statut) => {
