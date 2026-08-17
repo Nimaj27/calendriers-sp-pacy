@@ -849,6 +849,35 @@ body {
   margin-top: var(--sp-2); padding-top: var(--sp-2);
   border-top: 1px solid rgba(234,179,8,.3);
 }
+
+/* ── Raccourcis de saisie (fluidité terrain) ────────────────── */
+.raccourcis-adresse {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  padding: var(--sp-2) 0;
+}
+.rac-label {
+  font-size: .74rem; color: var(--ardoise-mid); font-weight: 600;
+  flex: 1 1 100%; margin-bottom: 2px;
+}
+.rac-btn {
+  border: 1.5px solid var(--gris-bord); border-radius: var(--r-sm);
+  background: var(--blanc); cursor: pointer;
+  font-family: var(--font); font-weight: 700;
+  transition: all .12s;
+}
+.rac-btn:active { transform: scale(.92); }
+.rac-btn--num {
+  min-width: 40px; padding: 7px 10px;
+  font-size: .9rem; color: var(--bleu); border-color: var(--bleu);
+}
+.rac-btn--num:hover { background: var(--bleu); color: var(--blanc); }
+.rac-btn--annuler {
+  flex: 1 1 100%; padding: 7px var(--sp-3);
+  font-size: .78rem; font-weight: 600;
+  color: var(--rouge-dark); border-color: var(--rouge-light);
+  background: var(--rouge-light); text-align: left;
+}
+.rac-btn--annuler:hover { background: #f8b4b4; }
 </style>
 </head>
 <body>
@@ -4155,6 +4184,7 @@ async function renderTerrainPassages() {
         <div id="geoloc-suggestions" class="geoloc-suggestions hidden"></div>
         <div id="vocal-feedback" class="vocal-feedback hidden"></div>
         <input id="p-adresse" class="input" placeholder="Adresse / numéro (optionnel)" autocomplete="off">
+        <div id="raccourcis-adresse" class="raccourcis-adresse hidden"></div>
         <div class="passage-statuts">
           <button class="statut-btn statut-btn--don"   data-statut="don"    onclick="selectStatut('don')">💰 Don</button>
           <button class="statut-btn statut-btn--refuse" data-statut="refuse" onclick="selectStatut('refuse')">🚫 Refus</button>
@@ -4200,6 +4230,20 @@ async function renderTerrainPassages() {
 
   const unsubNet = bindNetworkBadge();
   APP.unsubs.push(unsubNet);
+
+  // Restaurer les raccourcis depuis le dernier passage de l'équipe sur ce secteur
+  (async () => {
+    try {
+      const passages = await passagesDuSecteur(secteurId);
+      const dernier = passages
+        .filter(p => p.equipeId === APP.equipeId && p.adresse)
+        .sort((a,b) => (b.datePassage||'').localeCompare(a.datePassage||''))[0];
+      if (dernier) {
+        APP._dernierPassage = { secteurId, adresse: dernier.adresse };
+        majRaccourcis(dernier.adresse, secteur.commune);
+      }
+    } catch(e) {}
+  })();
 
   let statutSelectionne = null;
   let modeSelectionne   = "especes";
@@ -4394,6 +4438,9 @@ async function renderTerrainPassages() {
         saisiPar: APP.membre || ""
       });
 
+      // Mémoriser la dernière saisie (pour annulation et raccourcis)
+      APP._dernierPassage = { secteurId, adresse };
+
       // Reset form
       document.getElementById("p-adresse").value  = "";
       document.getElementById("p-montant") && (document.getElementById("p-montant").value = "");
@@ -4406,6 +4453,9 @@ async function renderTerrainPassages() {
       document.getElementById("absent-details")?.classList.add("hidden");
       btn.disabled = true;
       toast("Passage enregistré ✅", "success");
+
+      // Proposer les raccourcis pour le foyer suivant
+      majRaccourcis(adresse, secteur.commune);
     } catch(e) { toast(e.message, "error"); }
     setLoading(btn, false);
   });
@@ -4630,6 +4680,104 @@ function demarrerPlanificateurResume() {
   if (notifsPermission() !== "granted") return;
   _arretPlanificateur = planifierResumeQuotidien(chargerDonneesResume, LOGO_SP);
 }
+
+
+// ════════════════════════════════════════════════════════════
+//  RACCOURCIS DE SAISIE (fluidité terrain)
+// ════════════════════════════════════════════════════════════
+
+// Affiche des raccourcis après une saisie : numéros suivants de la même rue
+// et bouton d'annulation de la dernière saisie.
+function majRaccourcis(derniereAdresse, commune) {
+  const box = document.getElementById("raccourcis-adresse");
+  if (!box) return;
+
+  const parts = [];
+
+  // ── Annuler la dernière saisie ──
+  if (APP._dernierPassage) {
+    parts.push(`<button class="rac-btn rac-btn--annuler" onclick="annulerDerniereSaisie()">
+                  ↩️ Annuler « ${(APP._dernierPassage.adresse || 'dernier passage').slice(0, 22)} »
+                </button>`);
+  }
+
+  // ── Numéros suivants de la même rue ──
+  const m = (derniereAdresse || '').trim().match(/^(\d+)\s*([a-zA-Z]?)\s+(.+)$/);
+  if (m) {
+    const numActuel = parseInt(m[1]);
+    const rue = m[3].trim();
+    // Chercher les numéros réels de cette rue dans les données BAN
+    let numeros = [];
+    try { numeros = numerosDeRue(commune, rue); } catch(e) {}
+
+    let suivants = [];
+    if (numeros.length > 0) {
+      // Prendre les numéros existants supérieurs au courant (même parité d'abord)
+      const memeParite = numeros.filter(n => {
+        const v = parseInt(n);
+        return v > numActuel && v % 2 === numActuel % 2;
+      }).slice(0, 4);
+      const autres = numeros.filter(n => {
+        const v = parseInt(n);
+        return v > numActuel && v % 2 !== numActuel % 2;
+      }).slice(0, 2);
+      suivants = [...memeParite, ...autres];
+    } else {
+      // Pas de données : proposer +2 / +4 (même trottoir) et +1
+      suivants = [numActuel + 2, numActuel + 4, numActuel + 1].map(String);
+    }
+
+    if (suivants.length > 0) {
+      parts.push(`<span class="rac-label">Suivant dans ${rue.length > 20 ? rue.slice(0,20)+'…' : rue} :</span>`);
+      suivants.forEach(n => {
+        const adr = `${n} ${rue}`;
+        parts.push(`<button class="rac-btn rac-btn--num"
+                      onclick="remplirAdresse('${adr.replace(/'/g, "\\'")}')">${n}</button>`);
+      });
+    }
+
+    // Mémoriser la rue en cours pour la prochaine saisie
+    APP._rueEnCours = { rue, commune };
+  }
+
+  if (parts.length === 0) { box.classList.add("hidden"); box.innerHTML = ''; return; }
+  box.classList.remove("hidden");
+  box.innerHTML = parts.join('');
+}
+
+// Remplit le champ adresse depuis un raccourci
+window.remplirAdresse = (adresse) => {
+  const champ = document.getElementById("p-adresse");
+  if (champ) { champ.value = adresse; champ.focus(); }
+};
+
+// Annule (supprime) la dernière saisie enregistrée
+window.annulerDerniereSaisie = async () => {
+  const d = APP._dernierPassage;
+  if (!d) { toast("Aucune saisie récente à annuler", "info"); return; }
+
+  // Retrouver le passage le plus récent de ce secteur pour cette équipe
+  try {
+    const passages = await passagesDuSecteur(d.secteurId);
+    const miens = passages
+      .filter(p => p.equipeId === APP.equipeId)
+      .sort((a, b) => (b.datePassage || '').localeCompare(a.datePassage || ''));
+    const dernier = miens[0];
+    if (!dernier) { toast("Passage introuvable", "error"); return; }
+
+    const desc = dernier.statut === "don"
+      ? `${formatMontant(dernier.montant)}`
+      : STATUT_PASSAGE_LABEL[dernier.statut] || dernier.statut;
+    if (!confirm(`Annuler cette saisie ?\n\n« ${dernier.adresse || 'sans adresse'} » — ${desc}`)) return;
+
+    await supprimerPassage(dernier.id, d.secteurId);
+    APP._dernierPassage = null;
+    document.getElementById("raccourcis-adresse")?.classList.add("hidden");
+    toast("Saisie annulée", "success");
+  } catch(e) {
+    toast("Erreur : " + e.message, "error");
+  }
+};
 
 // Exposer naviguer globalement pour les onclick inline
 window.naviguer = naviguer;
