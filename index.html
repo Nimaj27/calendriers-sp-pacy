@@ -1116,6 +1116,18 @@ body {
 .mn-btn--offert.mn-btn--sel { background:#2563EB; border-color:#2563EB; color:#fff; }
 .mn-btn--refuse.mn-btn--sel { background:#EF4444; border-color:#EF4444; color:#fff; }
 .mn-btn--absent.mn-btn--sel { background:#EAB308; border-color:#EAB308; color:#fff; }
+
+/* ── Ajout manuel de numéros (lieux-dits) ───────────────────── */
+.mr-ajouter {
+  width: 100%; margin-top: var(--sp-3); padding: var(--sp-3);
+  background: var(--blanc); border: 1.5px dashed var(--gris-bord);
+  border-radius: var(--r-md); cursor: pointer;
+  font-family: var(--font); font-size: .82rem; font-weight: 600;
+  color: var(--ardoise-mid);
+}
+.mr-ajouter:hover { border-color: var(--bleu); color: var(--bleu); background: var(--bleu-light); }
+.mr-num--ajout { border-style: dashed; }
+.mr-num--ajout.mr-num--fait { border-style: solid; box-shadow: 0 0 0 2px rgba(37,99,235,.25); }
 </style>
 </head>
 <body>
@@ -5316,18 +5328,43 @@ function majModeRue(secteur, passages) {
     return;
   }
 
+  // Numéros ajoutés manuellement pour cette rue (lieux-dits, BAN incomplète)
+  const clefAjouts = `ajouts_${secteur.id}_${normAdr(rueActive)}`;
+  let ajouts = [];
+  try { ajouts = JSON.parse(localStorage.getItem(clefAjouts) || '[]'); } catch(e) {}
+
+  // Récupérer aussi les numéros présents dans les passages mais absents de la BAN
+  const depuisPassages = passages
+    .filter(p => {
+      const a = (p.adresse || '').trim();
+      const m = a.match(/^(\S+)\s+(.*)$/);
+      return m && normAdr(m[2]) === normAdr(rueActive);
+    })
+    .map(p => p.adresse.trim().match(/^(\S+)\s+/)[1]);
+
+  // Fusionner : BAN + ajouts manuels + numéros déjà saisis
+  const tousNums = [...new Set([...numeros, ...ajouts, ...depuisPassages])]
+    .sort((a, b) => {
+      const na = parseInt(a), nb = parseInt(b);
+      if (isNaN(na) && isNaN(nb)) return String(a).localeCompare(String(b));
+      if (isNaN(na)) return 1;
+      if (isNaN(nb)) return -1;
+      return na - nb || String(a).localeCompare(String(b));
+    });
+
   // Statut de chaque numéro d'après les passages enregistrés
   const statuts = {};
-  for (const n of numeros) {
+  for (const n of tousNums) {
     const p = passages.find(x => normAdr(x.adresse) === normAdr(`${n} ${rueActive}`));
     if (p) statuts[n] = p.statut;
   }
   const faits = Object.keys(statuts).length;
-  const pct = Math.round((faits / numeros.length) * 100);
+  const pct = tousNums.length ? Math.round((faits / tousNums.length) * 100) : 0;
 
   // Séparer pairs et impairs (les deux trottoirs)
-  const impairs = numeros.filter(n => (parseInt(n) % 2) === 1);
-  const pairs   = numeros.filter(n => (parseInt(n) % 2) === 0);
+  const impairs = tousNums.filter(n => (parseInt(n) % 2) === 1);
+  const pairs   = tousNums.filter(n => (parseInt(n) % 2) === 0);
+  const autres  = tousNums.filter(n => isNaN(parseInt(n)));
 
   const grille = (liste, titre) => liste.length === 0 ? '' : `
     <div class="mr-cote">
@@ -5336,9 +5373,10 @@ function majModeRue(secteur, passages) {
         ${liste.map(n => {
           const st = statuts[n];
           const c = st ? COULEURS_STATUT_NUM[st] : null;
-          return `<button class="mr-num ${st ? 'mr-num--fait' : ''}"
+          const aj = ajouts.includes(n);
+          return `<button class="mr-num ${st ? 'mr-num--fait' : ''} ${aj ? 'mr-num--ajout' : ''}"
             style="${c ? `background:${c.bg};border-color:${c.bg};color:#fff` : ''}"
-            title="${c ? c.label : 'Non visité'}"
+            title="${c ? c.label : 'Non visité'}${aj ? ' — ajouté manuellement' : ''}"
             onclick="saisirNumero('${n}','${rueActive.replace(/'/g,"\\'")}')">${n}</button>`;
         }).join('')}
       </div>
@@ -5349,7 +5387,7 @@ function majModeRue(secteur, passages) {
       <div class="mr-grille-head">
         <div>
           <div class="mr-grille-rue">${rueActive}</div>
-          <div class="mr-grille-prog">${faits} / ${numeros.length} traités · ${pct}%</div>
+          <div class="mr-grille-prog">${faits} / ${tousNums.length} traités · ${pct}%${ajouts.length ? ` · ${ajouts.length} ajouté${ajouts.length>1?'s':''}` : ''}</div>
         </div>
         <button class="mr-quitter" onclick="quitterRue()">Changer de rue</button>
       </div>
@@ -5357,6 +5395,11 @@ function majModeRue(secteur, passages) {
 
       ${grille(impairs, 'Numéros impairs')}
       ${grille(pairs, 'Numéros pairs')}
+      ${grille(autres, 'Autres')}
+
+      <button class="mr-ajouter" onclick="ajouterNumero('${rueActive.replace(/'/g,"\\'")}')">
+        ➕ Ajouter un numéro ou un nom
+      </button>
 
       <div class="mr-legende">
         ${Object.entries(COULEURS_STATUT_NUM).filter(([k]) => k !== 'relance').map(([k,v]) =>
@@ -5367,6 +5410,47 @@ function majModeRue(secteur, passages) {
     </div>
   `;
 }
+
+
+// Ajoute manuellement un numéro à une rue (lieux-dits, BAN incomplète)
+window.ajouterNumero = async (rue) => {
+  const secteurId = sessionStorage.getItem("secteurActif");
+  if (!secteurId) return;
+
+  const v = prompt(
+    `Ajouter à « ${rue} »\n\n` +
+    `Saisis un numéro (ex : 12, 12bis) ou un repère (ex : Ferme, Maison bleue).\n` +
+    `Plusieurs à la fois : sépare par des virgules.`
+  );
+  if (!v || !v.trim()) return;
+
+  const clef = `ajouts_${secteurId}_${normAdr(rue)}`;
+  let ajouts = [];
+  try { ajouts = JSON.parse(localStorage.getItem(clef) || '[]'); } catch(e) {}
+
+  const nouveaux = v.split(',').map(x => x.trim()).filter(Boolean);
+  let n = 0;
+  for (const num of nouveaux) {
+    if (!ajouts.includes(num)) { ajouts.push(num); n++; }
+  }
+  localStorage.setItem(clef, JSON.stringify(ajouts));
+  toast(n > 0 ? `${n} entrée${n>1?'s':''} ajoutée${n>1?'s':''}` : "Déjà présent", n > 0 ? "success" : "info");
+  rafraichirModeRue();
+};
+
+// Retire un numéro ajouté manuellement (appui long ou depuis la modale)
+window.retirerNumeroAjoute = (rue, numero) => {
+  const secteurId = sessionStorage.getItem("secteurActif");
+  if (!secteurId) return;
+  const clef = `ajouts_${secteurId}_${normAdr(rue)}`;
+  let ajouts = [];
+  try { ajouts = JSON.parse(localStorage.getItem(clef) || '[]'); } catch(e) {}
+  ajouts = ajouts.filter(x => x !== numero);
+  localStorage.setItem(clef, JSON.stringify(ajouts));
+  document.getElementById("modal-num")?.classList.add("hidden");
+  toast("Entrée retirée de la liste", "success");
+  rafraichirModeRue();
+};
 
 window.ouvrirSelecteurRue = () => {
   document.getElementById("mr-selecteur")?.classList.remove("hidden");
@@ -5411,6 +5495,13 @@ window.saisirNumero = async (numero, rue) => {
   const passages = await passagesDuSecteur(secteurId);
   const existant = passages.find(p => normAdr(p.adresse) === normAdr(adresse));
 
+  // Ce numéro vient-il d'un ajout manuel ?
+  let estAjout = false;
+  try {
+    const aj = JSON.parse(localStorage.getItem(`ajouts_${secteurId}_${normAdr(rue)}`) || '[]');
+    estAjout = aj.includes(numero);
+  } catch(e) {}
+
   let modal = document.getElementById("modal-num");
   if (!modal) {
     modal = document.createElement("div");
@@ -5440,6 +5531,7 @@ window.saisirNumero = async (numero, rue) => {
       <div class="modal-actions">
         <button id="mn-valider" class="btn btn--primary" disabled>Enregistrer</button>
         ${existant ? `<button class="btn btn--danger" onclick="mnSupprimer('${existant.id}','${secteurId}')">🗑️ Supprimer</button>` : ''}
+        ${estAjout && !existant ? `<button class="btn btn--ghost btn--sm" onclick="retirerNumeroAjoute('${rue.replace(/'/g,"\\'")}','${numero}')">Retirer de la liste</button>` : ''}
         <button class="btn btn--ghost" onclick="document.getElementById('modal-num').classList.add('hidden')">Annuler</button>
       </div>
     </div>
