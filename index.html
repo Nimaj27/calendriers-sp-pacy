@@ -878,6 +878,55 @@ body {
   background: var(--rouge-light); text-align: left;
 }
 .rac-btn--annuler:hover { background: #f8b4b4; }
+
+/* ── Bandeau de stats terrain (boîtes restantes + totaux) ───── */
+.terrain-stats {
+  margin: 0 var(--sp-4) var(--sp-3);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+}
+.ts-compteur {
+  background: var(--blanc); border: 1.5px solid var(--gris-bord);
+  border-radius: var(--r-md); padding: var(--sp-4);
+  text-align: center;
+}
+.ts-compteur-chiffre {
+  font-size: 2.6rem; font-weight: 800; line-height: 1;
+  letter-spacing: -.02em;
+}
+.ts-compteur-label {
+  font-size: .82rem; font-weight: 600; color: var(--ardoise-mid);
+  margin-top: 2px; margin-bottom: var(--sp-3);
+}
+.ts-barre {
+  height: 8px; background: var(--ardoise-light);
+  border-radius: 99px; overflow: hidden;
+}
+.ts-barre-fill { height: 100%; border-radius: 99px; transition: width .45s ease; }
+.ts-compteur-detail {
+  font-size: .74rem; color: var(--ardoise-mid); margin-top: var(--sp-2);
+}
+.ts-chiffres {
+  display: flex; gap: var(--sp-2);
+  background: var(--blanc); border: 1.5px solid var(--gris-bord);
+  border-radius: var(--r-md); padding: var(--sp-3);
+}
+.ts-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 2px; text-align: center;
+}
+.ts-item + .ts-item { border-left: 1px solid var(--ardoise-light); }
+.ts-val { font-size: 1.05rem; font-weight: 700; color: var(--ardoise); }
+.ts-item--montant .ts-val { color: var(--vert); }
+.ts-lbl { font-size: .68rem; color: var(--ardoise-mid); line-height: 1.2; }
+
+/* ── Compteur sur les cartes de secteur (accueil équipier) ──── */
+.terrain-secteur-reste { margin-top: var(--sp-2); }
+.tsr-barre {
+  height: 5px; background: var(--ardoise-light);
+  border-radius: 99px; overflow: hidden; margin-bottom: 4px;
+}
+.tsr-fill { height: 100%; border-radius: 99px; transition: width .4s; }
+.tsr-txt { font-size: .74rem; color: var(--ardoise-mid); }
 </style>
 </head>
 <body>
@@ -1998,6 +2047,26 @@ function numerosDeRue(commune, rue) {
   return data.p.filter(p => p[1] === idx)
                .map(p => p[0])
                .sort((a, b) => (parseInt(a)||9999) - (parseInt(b)||9999));
+}
+
+// Nombre total de boîtes aux lettres d'un secteur (somme de ses rues)
+// secteur : objet avec .commune et .rues[]
+function nbFoyersSecteur(secteur) {
+  if (!secteur || !secteur.commune) return 0;
+  const data = GEO_ADRESSES[secteur.commune];
+  if (!data) return 0;
+
+  // Sans rues renseignées → toute la commune
+  if (!secteur.rues || secteur.rues.length === 0) return data.p.length;
+
+  // Sinon, somme des rues du secteur (comparaison souple)
+  const norm = s => (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  const cibles = new Set(secteur.rues.map(norm));
+  const idxOk = new Set();
+  data.r.forEach((r, i) => { if (cibles.has(norm(r))) idxOk.add(i); });
+  return data.p.filter(p => idxOk.has(p[1])).length;
 }
 
 // ============================================================
@@ -4125,9 +4194,20 @@ function renderTerrainSecteurs(secteurs) {
           </div>
           <div class="terrain-secteur-stats">
             <span>💰 ${formatMontant(s.totalCollecte)}</span>
-            <span>✅ ${s.nbFoyersVisites || 0} visités</span>
+            <span>✅ ${s.nbFoyersVisites || 0} traités</span>
             <span>🔔 ${s.nbFoyersAbsents || 0} absents</span>
           </div>
+          ${(() => {
+            const tot = nbFoyersSecteur(s);
+            if (!tot) return '';
+            const rest = Math.max(0, tot - (s.nbFoyersVisites || 0));
+            const p = Math.round(((s.nbFoyersVisites||0) / tot) * 100);
+            const col = p >= 90 ? '#16A34A' : p >= 60 ? '#EAB308' : p >= 30 ? '#F97316' : '#EF4444';
+            return `<div class="terrain-secteur-reste">
+              <div class="tsr-barre"><div class="tsr-fill" style="width:${p}%;background:${col}"></div></div>
+              <span class="tsr-txt"><strong style="color:${col}">${rest}</strong> boîte${rest!==1?'s':''} restante${rest!==1?'s':''} sur ${tot}</span>
+            </div>`;
+          })()}
           ${s.rues?.length ? `<div class="terrain-secteur-rues">${s.rues.join(' · ')}</div>` : ''}
         </div>
       `).join('')}
@@ -4168,6 +4248,8 @@ async function renderTerrainPassages() {
 
       <!-- Mini carte du secteur -->
       <div id="terrain-secteur-map" style="height:200px;margin:0 16px 16px;border-radius:12px;overflow:hidden;border:1.5px solid var(--gris-bord);"></div>
+
+      <div id="terrain-stats" class="terrain-stats"></div>
 
       <!-- Formulaire passage rapide -->
       <div class="passage-form">
@@ -4462,6 +4544,9 @@ async function renderTerrainPassages() {
 
   // Écoute temps réel
   const unsub = ecouterPassagesSecteur(secteurId, (passages) => {
+    // ── Bandeau de statistiques du secteur ──
+    majStatsTerrain(secteur, passages);
+
     // ── Bloc « Mes foyers à relancer » sur ce secteur ──
     const boxRel = document.getElementById("terrain-relances");
     if (boxRel) {
@@ -4681,6 +4766,57 @@ function demarrerPlanificateurResume() {
   _arretPlanificateur = planifierResumeQuotidien(chargerDonneesResume, LOGO_SP);
 }
 
+
+
+// ── Bandeau de stats du secteur (boîtes restantes + totaux du jour) ──
+function majStatsTerrain(secteur, passages) {
+  const box = document.getElementById("terrain-stats");
+  if (!box) return;
+
+  const totalBoites = nbFoyersSecteur(secteur);
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+
+  // Traités = dons + refus (les absents restent « à faire »)
+  const traites  = passages.filter(p => p.statut === "don" || p.statut === "refuse").length;
+  const absents  = passages.filter(p => p.statut === "absent" || p.statut === "relance").length;
+  const restantes = totalBoites > 0 ? Math.max(0, totalBoites - traites) : null;
+
+  // Totaux du jour (toutes équipes sur ce secteur)
+  const duJour = passages.filter(p => (p.datePassage || '').slice(0, 10) === aujourdhui);
+  const donsJour = duJour.filter(p => p.statut === "don");
+  const montantJour = donsJour.reduce((s, p) => s + Number(p.montant || 0), 0);
+
+  // Total cumulé du secteur
+  const montantTotal = passages.filter(p => p.statut === "don")
+                               .reduce((s, p) => s + Number(p.montant || 0), 0);
+
+  const pct = totalBoites > 0 ? Math.round((traites / totalBoites) * 100) : 0;
+  const couleur = pct >= 90 ? "#16A34A" : pct >= 60 ? "#EAB308" : pct >= 30 ? "#F97316" : "#EF4444";
+
+  box.innerHTML = `
+    ${restantes !== null ? `
+    <div class="ts-compteur">
+      <div class="ts-compteur-chiffre" style="color:${couleur}">${restantes}</div>
+      <div class="ts-compteur-label">boîte${restantes !== 1 ? 's' : ''} restante${restantes !== 1 ? 's' : ''}</div>
+      <div class="ts-barre"><div class="ts-barre-fill" style="width:${pct}%;background:${couleur}"></div></div>
+      <div class="ts-compteur-detail">${traites} / ${totalBoites} traitée${traites !== 1 ? 's' : ''}${absents > 0 ? ` · ${absents} absent${absents > 1 ? 's' : ''} à revoir` : ''}</div>
+    </div>` : ''}
+    <div class="ts-chiffres">
+      <div class="ts-item">
+        <span class="ts-val">${donsJour.length}</span>
+        <span class="ts-lbl">don${donsJour.length !== 1 ? 's' : ''} aujourd'hui</span>
+      </div>
+      <div class="ts-item ts-item--montant">
+        <span class="ts-val">${formatMontant(montantJour)}</span>
+        <span class="ts-lbl">collecté aujourd'hui</span>
+      </div>
+      <div class="ts-item">
+        <span class="ts-val">${formatMontant(montantTotal)}</span>
+        <span class="ts-lbl">total du secteur</span>
+      </div>
+    </div>
+  `;
+}
 
 // ════════════════════════════════════════════════════════════
 //  RACCOURCIS DE SAISIE (fluidité terrain)
