@@ -927,6 +927,41 @@ body {
 }
 .tsr-fill { height: 100%; border-radius: 99px; transition: width .4s; }
 .tsr-txt { font-size: .74rem; color: var(--ardoise-mid); }
+
+/* ── Statut "Offert" ────────────────────────────────────────── */
+.passage-statuts--4 { flex-wrap: wrap; }
+.passage-statuts--4 .statut-btn { flex: 1 1 calc(50% - 4px); font-size: .82rem; }
+.statut-btn--offert:hover, .statut-btn--offert.statut-btn--selected {
+  background: var(--bleu-light); border-color: var(--bleu); color: var(--bleu);
+}
+.badge--offert { background: var(--bleu-light); color: var(--bleu); }
+.passage-item--offert .passage-statut-dot { background: var(--bleu); }
+.tr--offert td { border-left: 3px solid var(--bleu); }
+
+/* ── Compteur de calendriers en poche ───────────────────────── */
+.ts-stock {
+  display: flex; align-items: center; gap: var(--sp-2);
+  background: var(--bleu-light); border: 1.5px solid var(--bleu);
+  border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4);
+}
+.ts-stock-icon { font-size: 1.2rem; }
+.ts-stock-val { font-size: 1.4rem; font-weight: 800; color: var(--bleu); }
+.ts-stock-lbl { font-size: .82rem; color: var(--bleu); font-weight: 600; flex: 1; }
+.ts-stock-edit {
+  background: none; border: none; cursor: pointer;
+  font-size: .95rem; opacity: .6; padding: 4px;
+}
+.ts-stock-edit:hover { opacity: 1; }
+.ts-stock-init {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+  width: 100%; padding: var(--sp-3) var(--sp-4);
+  background: var(--blanc); border: 1.5px dashed var(--gris-bord);
+  border-radius: var(--r-md); cursor: pointer;
+  font-family: var(--font); font-size: .85rem; color: var(--ardoise-mid);
+}
+.ts-stock-init span { font-weight: 700; color: var(--bleu); }
+.ts-stock-init:hover { border-color: var(--bleu); background: var(--bleu-light); }
+.ts-val small { font-size: .7rem; color: var(--bleu); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -1087,8 +1122,8 @@ async function statsGlobales() {
 
 // tournee.js — Logique métier tournée calendriers
 
-const STATUT_PASSAGE = { DON:"don", REFUSE:"refuse", ABSENT:"absent", RELANCE:"relance" };
-const STATUT_PASSAGE_LABEL = { don:"Don collecté", refuse:"A refusé", absent:"Absent", relance:"À relancer" };
+const STATUT_PASSAGE = { DON:"don", OFFERT:"offert", REFUSE:"refuse", ABSENT:"absent", RELANCE:"relance" };
+const STATUT_PASSAGE_LABEL = { don:"Don collecté", offert:"Calendrier offert", refuse:"A refusé", absent:"Absent", relance:"À relancer" };
 const MODE_PAIEMENT = { ESPECES:"especes", CHEQUE:"cheque", CARTE:"carte" };
 
 async function creerEquipe({ nom, membres=[], pin }) {
@@ -1120,6 +1155,7 @@ async function ajouterPassage({ secteurId, equipeId, equipeNom, adresse, statut,
   if (!secteurId||!equipeId) throw new Error("secteurId et equipeId obligatoires");
   if (!Object.values(STATUT_PASSAGE).includes(statut)) throw new Error("Statut invalide");
   if (statut===STATUT_PASSAGE.DON && montant<=0) throw new Error("Montant requis pour un don");
+  // Le statut "offert" ne requiert aucun montant (calendrier donné sans contrepartie)
   const passage = await fsAdd(COLLECTIONS.PASSAGES, {
     secteurId, equipeId, equipeNom, adresse:adresse||"", statut,
     montant: statut===STATUT_PASSAGE.DON ? Number(montant) : 0,
@@ -1176,24 +1212,29 @@ async function statsGlobalesTournee() {
   const [passages, equipes, secteurs] = await Promise.all([
     fsGetAll(COLLECTIONS.PASSAGES), fsGetAll(COLLECTIONS.EQUIPES), fsGetAll(COLLECTIONS.SECTEURS)
   ]);
-  let totalEspeces=0, totalCheques=0, totalCarte=0, nbDons=0, nbRefus=0, nbAbsents=0, nbRelances=0;
+  let totalEspeces=0, totalCheques=0, totalCarte=0, nbDons=0, nbOfferts=0, nbRefus=0, nbAbsents=0, nbRelances=0;
   for (const p of passages) {
     if (p.statut==="don") { nbDons++; if(p.modePaiement==="especes") totalEspeces+=Number(p.montant||0); else if(p.modePaiement==="cheque") totalCheques+=Number(p.montant||0); else if(p.modePaiement==="carte") totalCarte+=Number(p.montant||0); }
+    if (p.statut==="offert") nbOfferts++;
     if (p.statut==="refuse") nbRefus++;
     if (p.statut==="absent") nbAbsents++;
     if (p.statut==="relance") nbRelances++;
   }
+  const nbCalendriers = nbDons + nbOfferts;   // calendriers distribués au total
   const totalCollecte = totalEspeces + totalCheques + totalCarte;
   const parEquipe = equipes.map(eq => {
     const eqPassages = passages.filter(p=>p.equipeId===eq.id);
     const montant = eqPassages.filter(p=>p.statut==="don").reduce((s,p)=>s+Number(p.montant||0),0);
     const nbRefusEq = eqPassages.filter(p=>p.statut==="refuse").length;
-    return { ...eq, montant, nbPassages:eqPassages.length, nbRefus:nbRefusEq };
+    const nbOffertsEq = eqPassages.filter(p=>p.statut==="offert").length;
+    const nbDonsEq = eqPassages.filter(p=>p.statut==="don").length;
+    return { ...eq, montant, nbPassages:eqPassages.length, nbRefus:nbRefusEq,
+             nbOfferts:nbOffertsEq, nbCalendriers:nbDonsEq + nbOffertsEq };
   }).sort((a,b)=>b.montant-a.montant);
   const nbSecteursTermines = secteurs.filter(s=>s.statut==="termine").length;
   const nbSecteursTotal = secteurs.length;
   const avancement = nbSecteursTotal>0 ? Math.round((nbSecteursTermines/nbSecteursTotal)*100) : 0;
-  return { totalCollecte, totalEspeces, totalCheques, totalCarte, nbDons, nbRefus, nbAbsents, nbRelances, nbPassages:passages.length, nbSecteursTermines, nbSecteursTotal, avancement, parEquipe };
+  return { totalCollecte, totalEspeces, totalCheques, totalCarte, nbDons, nbOfferts, nbCalendriers, nbRefus, nbAbsents, nbRelances, nbPassages:passages.length, nbSecteursTermines, nbSecteursTotal, avancement, parEquipe };
 }
 
 async function lireConfig() { return fsGet(COLLECTIONS.CONFIG, "tournee"); }
@@ -4267,8 +4308,9 @@ async function renderTerrainPassages() {
         <div id="vocal-feedback" class="vocal-feedback hidden"></div>
         <input id="p-adresse" class="input" placeholder="Adresse / numéro (optionnel)" autocomplete="off">
         <div id="raccourcis-adresse" class="raccourcis-adresse hidden"></div>
-        <div class="passage-statuts">
+        <div class="passage-statuts passage-statuts--4">
           <button class="statut-btn statut-btn--don"   data-statut="don"    onclick="selectStatut('don')">💰 Don</button>
+          <button class="statut-btn statut-btn--offert" data-statut="offert" onclick="selectStatut('offert')">🎁 Offert</button>
           <button class="statut-btn statut-btn--refuse" data-statut="refuse" onclick="selectStatut('refuse')">🚫 Refus</button>
           <button class="statut-btn statut-btn--absent" data-statut="absent" onclick="selectStatut('absent')">🔔 Absent</button>
         </div>
@@ -4586,7 +4628,7 @@ async function renderTerrainPassages() {
         <div class="passage-info">
           <span class="passage-adresse">${p.adresse || '(adresse non précisée)'}</span>
           <span class="passage-badge">${STATUT_PASSAGE_LABEL[p.statut] || p.statut}</span>
-          ${p.statut === 'don' ? `<span class="passage-montant">${formatMontant(p.montant)} ${p.modePaiement === 'cheque' ? '📝' : p.modePaiement === 'carte' ? '💳' : '💵'}</span>` : ''}
+          ${p.statut === 'don' ? `<span class="passage-montant">${formatMontant(p.montant)} ${p.modePaiement === 'cheque' ? '📝' : p.modePaiement === 'carte' ? '💳' : '💵'}</span>` : p.statut === 'offert' ? `<span class="passage-montant" style="color:var(--bleu)">🎁 offert</span>` : ''}
         </div>
         <span class="passage-meta">
           ${p.saisiPar ? `<span class="passage-auteur" title="Saisi par ${p.saisiPar}">${p.saisiPar.slice(0,2).toUpperCase()}</span>` : ''}
@@ -4630,6 +4672,7 @@ window.corrigerPassage = async (passageId, secteurId) => {
       <label class="label">Statut</label>
       <div class="passage-statuts" style="margin-bottom:8px;">
         <button class="statut-btn statut-btn--don ${p.statut === 'don' ? 'statut-btn--selected' : ''}" data-cp-statut="don" onclick="cpSelectStatut('don')">💰 Don</button>
+        <button class="statut-btn statut-btn--offert ${p.statut === 'offert' ? 'statut-btn--selected' : ''}" data-cp-statut="offert" onclick="cpSelectStatut('offert')">🎁 Offert</button>
         <button class="statut-btn statut-btn--refuse ${p.statut === 'refuse' ? 'statut-btn--selected' : ''}" data-cp-statut="refuse" onclick="cpSelectStatut('refuse')">🚫 Refus</button>
         <button class="statut-btn statut-btn--absent ${(p.statut === 'absent' || p.statut === 'relance') ? 'statut-btn--selected' : ''}" data-cp-statut="absent" onclick="cpSelectStatut('absent')">🔔 Absent</button>
       </div>
@@ -4768,6 +4811,27 @@ function demarrerPlanificateurResume() {
 
 
 
+
+// Définit le nombre de calendriers emportés par l'équipe (stocké localement)
+window.definirStock = () => {
+  const actuel = localStorage.getItem(`stock_${APP.equipeId}`) || '';
+  const v = prompt("Combien de calendriers as-tu emportés ?\n\n(Laisse vide pour désactiver le compteur)", actuel);
+  if (v === null) return;
+  const n = parseInt(v);
+  if (!v.trim()) {
+    localStorage.removeItem(`stock_${APP.equipeId}`);
+    toast("Compteur de calendriers désactivé", "info");
+  } else if (isNaN(n) || n < 0) {
+    toast("Nombre invalide", "error"); return;
+  } else {
+    localStorage.setItem(`stock_${APP.equipeId}`, String(n));
+    toast(`Stock défini à ${n} calendriers`, "success");
+  }
+  // Rafraîchir l'affichage
+  const sid = sessionStorage.getItem("secteurActif");
+  if (sid) naviguer("#terrain-passages");
+};
+
 // ── Bandeau de stats du secteur (boîtes restantes + totaux du jour) ──
 function majStatsTerrain(secteur, passages) {
   const box = document.getElementById("terrain-stats");
@@ -4784,6 +4848,7 @@ function majStatsTerrain(secteur, passages) {
   // Totaux du jour (toutes équipes sur ce secteur)
   const duJour = passages.filter(p => (p.datePassage || '').slice(0, 10) === aujourdhui);
   const donsJour = duJour.filter(p => p.statut === "don");
+  const offertsJour = duJour.filter(p => p.statut === "offert");
   const montantJour = donsJour.reduce((s, p) => s + Number(p.montant || 0), 0);
 
   // Total cumulé du secteur
@@ -4793,7 +4858,22 @@ function majStatsTerrain(secteur, passages) {
   const pct = totalBoites > 0 ? Math.round((traites / totalBoites) * 100) : 0;
   const couleur = pct >= 90 ? "#16A34A" : pct >= 60 ? "#EAB308" : pct >= 30 ? "#F97316" : "#EF4444";
 
+  // Calendriers distribués (dons + offerts) et stock en poche
+  const distribues = passages.filter(p => p.statut === "don" || p.statut === "offert").length;
+  const stockInit = Number(localStorage.getItem(`stock_${APP.equipeId}`) || 0);
+  const enPoche = stockInit > 0 ? Math.max(0, stockInit - distribues) : null;
+
   box.innerHTML = `
+    ${enPoche !== null ? `
+    <div class="ts-stock">
+      <span class="ts-stock-icon">📅</span>
+      <span class="ts-stock-val">${enPoche}</span>
+      <span class="ts-stock-lbl">calendrier${enPoche !== 1 ? 's' : ''} en poche</span>
+      <button class="ts-stock-edit" onclick="definirStock()" title="Modifier le stock">✏️</button>
+    </div>` : `
+    <button class="ts-stock-init" onclick="definirStock()">
+      📅 Combien de calendriers as-tu ? <span>Renseigner</span>
+    </button>`}
     ${restantes !== null ? `
     <div class="ts-compteur">
       <div class="ts-compteur-chiffre" style="color:${couleur}">${restantes}</div>
@@ -4803,7 +4883,7 @@ function majStatsTerrain(secteur, passages) {
     </div>` : ''}
     <div class="ts-chiffres">
       <div class="ts-item">
-        <span class="ts-val">${donsJour.length}</span>
+        <span class="ts-val">${donsJour.length}${offertsJour.length > 0 ? `<small>+${offertsJour.length}🎁</small>` : ''}</span>
         <span class="ts-lbl">don${donsJour.length !== 1 ? 's' : ''} aujourd'hui</span>
       </div>
       <div class="ts-item ts-item--montant">
