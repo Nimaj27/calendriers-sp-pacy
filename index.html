@@ -4445,6 +4445,7 @@ function renderTerrainSecteurs(secteurs) {
 }
 
 window.naviguerTerrain = (secteurId) => {
+  APP._rueActive = null;   // nouvelle rue à choisir pour ce secteur
   sessionStorage.setItem("secteurActif", secteurId);
   naviguer("#terrain-passages");
 };
@@ -5372,14 +5373,31 @@ window.ouvrirSelecteurRue = () => {
   document.getElementById("mr-recherche")?.focus();
 };
 
+// Rafraîchit le bloc mode-rue sans recharger toute la page
+async function rafraichirModeRue() {
+  const secteurId = sessionStorage.getItem("secteurActif");
+  if (!secteurId) return;
+  try {
+    const [secteur, passages] = await Promise.all([
+      lireSecteur(secteurId),
+      passagesDuSecteur(secteurId)
+    ]);
+    if (secteur) majModeRue(secteur, passages);
+  } catch(e) { console.warn("Rafraîchissement mode rue:", e); }
+}
+
 window.activerRue = (rue) => {
   APP._rueActive = rue;
-  naviguer("#terrain-passages");
+  rafraichirModeRue();
+  // Remonter à la grille
+  setTimeout(() => {
+    document.getElementById("mode-rue")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 100);
 };
 
 window.quitterRue = () => {
   APP._rueActive = null;
-  naviguer("#terrain-passages");
+  rafraichirModeRue();
 };
 
 // Saisie rapide d'un numéro depuis la grille
