@@ -1915,8 +1915,19 @@ async function afficherSecteursSurCarte(map, secteurs, equipes=[]) {
   return layers;
 }
 async function afficherSecteurUnique(map, secteur) {
-  const codeInsee=COMMUNES_INSEE[secteur.commune]; if(!codeInsee) return null;
-  const geojson=await fetchContourCommune(codeInsee); if(!geojson) return null;
+  let geojson = null;
+
+  // 1. Polygone précalculé du secteur (Pacy, Ménilles, Saint-Aquilin)
+  if (POLYGONES_SECTEURS[secteur.nom]) {
+    geojson = { type: "Feature", geometry: POLYGONES_SECTEURS[secteur.nom], properties: {} };
+  }
+  // 2. Sinon, contour communal officiel
+  if (!geojson) {
+    const codeInsee = COMMUNES_INSEE[secteur.commune];
+    if (!codeInsee) return null;
+    geojson = await fetchContourCommune(codeInsee);
+  }
+  if (!geojson) return null;
   const couleur=secteur.couleur||"#CC1D1D";
   const layer=L.geoJSON(geojson,{style:{color:couleur,weight:3,fillColor:couleur,fillOpacity:0.3}});
   layer.addTo(map);
