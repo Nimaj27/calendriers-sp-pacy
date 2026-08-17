@@ -1289,6 +1289,48 @@ async function statsGlobales() {
   };
 }
 
+// ── Compléments d'adresses par rue (lieux-dits, BAN incomplète) ──
+// Stockés dans le secteur : partagés entre équipiers et conservés d'une année sur l'autre
+// Format : { "nom de rue normalisé": ["12", "12bis", "Ferme"] }
+
+function normRue(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+async function ajouterComplements(secteurId, rue, numeros) {
+  const secteur = await fsGet(COLLECTIONS.SECTEURS, secteurId);
+  if (!secteur) throw new Error("Secteur introuvable");
+  const comp = secteur.ruesComplements || {};
+  const clef = normRue(rue);
+  const actuels = comp[clef] || [];
+  let ajoutes = 0;
+  for (const n of numeros) {
+    const v = String(n).trim();
+    if (v && !actuels.includes(v)) { actuels.push(v); ajoutes++; }
+  }
+  comp[clef] = actuels;
+  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, { ruesComplements: comp });
+  return ajoutes;
+}
+
+async function retirerComplement(secteurId, rue, numero) {
+  const secteur = await fsGet(COLLECTIONS.SECTEURS, secteurId);
+  if (!secteur) throw new Error("Secteur introuvable");
+  const comp = secteur.ruesComplements || {};
+  const clef = normRue(rue);
+  comp[clef] = (comp[clef] || []).filter(x => x !== String(numero));
+  if (comp[clef].length === 0) delete comp[clef];
+  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, { ruesComplements: comp });
+}
+
+// Lit les compléments d'une rue depuis un objet secteur déjà chargé
+function lireComplements(secteur, rue) {
+  if (!secteur || !secteur.ruesComplements) return [];
+  return secteur.ruesComplements[normRue(rue)] || [];
+}
+
 // tournee.js — Logique métier tournée calendriers
 
 const STATUT_PASSAGE = { DON:"don", OFFERT:"offert", REFUSE:"refuse", ABSENT:"absent", RELANCE:"relance" };
@@ -4787,11 +4829,22 @@ async function renderTerrainPassages() {
   });
 
   // Écoute temps réel
+  // Écoute du secteur lui-même : compléments d'adresses ajoutés par un binôme
+  APP._secteurCourant = secteur;
+  const unsubSect = fsListenDoc(COLLECTIONS.SECTEURS, secteurId, (s) => {
+    if (s) {
+      APP._secteurCourant = s;
+      // Redessiner la grille si une rue est active
+      if (APP._rueActive) rafraichirModeRue();
+    }
+  });
+  APP.unsubs.push(unsubSect);
+
   const unsub = ecouterPassagesSecteur(secteurId, (passages) => {
     // ── Bandeau de statistiques du secteur ──
     majStatsTerrain(secteur, passages);
-    // ── Mode « rue en cours » ──
-    majModeRue(secteur, passages);
+    // ── Mode « rue en cours » ── (secteur rafraîchi si compléments modifiés)
+    majModeRue(APP._secteurCourant || secteur, passages);
 
     // ── Bloc « Mes foyers à relancer » sur ce secteur ──
     const boxRel = document.getElementById("terrain-relances");
@@ -5328,10 +5381,8 @@ function majModeRue(secteur, passages) {
     return;
   }
 
-  // Numéros ajoutés manuellement pour cette rue (lieux-dits, BAN incomplète)
-  const clefAjouts = `ajouts_${secteur.id}_${normAdr(rueActive)}`;
-  let ajouts = [];
-  try { ajouts = JSON.parse(localStorage.getItem(clefAjouts) || '[]'); } catch(e) {}
+  // Numéros ajoutés manuellement (stockés dans le secteur → partagés et durables)
+  const ajouts = lireComplements(secteur, rueActive);
 
   // Récupérer aussi les numéros présents dans les passages mais absents de la BAN
   const depuisPassages = passages
@@ -5420,36 +5471,31 @@ window.ajouterNumero = async (rue) => {
   const v = prompt(
     `Ajouter à « ${rue} »\n\n` +
     `Saisis un numéro (ex : 12, 12bis) ou un repère (ex : Ferme, Maison bleue).\n` +
-    `Plusieurs à la fois : sépare par des virgules.`
+    `Plusieurs à la fois : sépare par des virgules.\n\n` +
+    `Ces ajouts sont partagés avec ton équipe et conservés pour les prochaines tournées.`
   );
   if (!v || !v.trim()) return;
 
-  const clef = `ajouts_${secteurId}_${normAdr(rue)}`;
-  let ajouts = [];
-  try { ajouts = JSON.parse(localStorage.getItem(clef) || '[]'); } catch(e) {}
-
   const nouveaux = v.split(',').map(x => x.trim()).filter(Boolean);
-  let n = 0;
-  for (const num of nouveaux) {
-    if (!ajouts.includes(num)) { ajouts.push(num); n++; }
+  try {
+    const n = await ajouterComplements(secteurId, rue, nouveaux);
+    toast(n > 0 ? `${n} entrée${n>1?'s':''} ajoutée${n>1?'s':''} ✅` : "Déjà présent", n > 0 ? "success" : "info");
+    rafraichirModeRue();
+  } catch(e) {
+    toast("Erreur : " + e.message, "error");
   }
-  localStorage.setItem(clef, JSON.stringify(ajouts));
-  toast(n > 0 ? `${n} entrée${n>1?'s':''} ajoutée${n>1?'s':''}` : "Déjà présent", n > 0 ? "success" : "info");
-  rafraichirModeRue();
 };
 
 // Retire un numéro ajouté manuellement (appui long ou depuis la modale)
-window.retirerNumeroAjoute = (rue, numero) => {
+window.retirerNumeroAjoute = async (rue, numero) => {
   const secteurId = sessionStorage.getItem("secteurActif");
   if (!secteurId) return;
-  const clef = `ajouts_${secteurId}_${normAdr(rue)}`;
-  let ajouts = [];
-  try { ajouts = JSON.parse(localStorage.getItem(clef) || '[]'); } catch(e) {}
-  ajouts = ajouts.filter(x => x !== numero);
-  localStorage.setItem(clef, JSON.stringify(ajouts));
-  document.getElementById("modal-num")?.classList.add("hidden");
-  toast("Entrée retirée de la liste", "success");
-  rafraichirModeRue();
+  try {
+    await retirerComplement(secteurId, rue, numero);
+    document.getElementById("modal-num")?.classList.add("hidden");
+    toast("Entrée retirée de la liste", "success");
+    rafraichirModeRue();
+  } catch(e) { toast("Erreur : " + e.message, "error"); }
 };
 
 window.ouvrirSelecteurRue = () => {
@@ -5496,11 +5542,7 @@ window.saisirNumero = async (numero, rue) => {
   const existant = passages.find(p => normAdr(p.adresse) === normAdr(adresse));
 
   // Ce numéro vient-il d'un ajout manuel ?
-  let estAjout = false;
-  try {
-    const aj = JSON.parse(localStorage.getItem(`ajouts_${secteurId}_${normAdr(rue)}`) || '[]');
-    estAjout = aj.includes(numero);
-  } catch(e) {}
+  const estAjout = lireComplements(secteur, rue).includes(numero);
 
   let modal = document.getElementById("modal-num");
   if (!modal) {
