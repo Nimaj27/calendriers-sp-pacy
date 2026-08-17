@@ -1166,6 +1166,58 @@ body {
   color: var(--ardoise-mid); white-space: nowrap;
 }
 .mn-outil:hover { border-color: var(--bleu); color: var(--bleu); background: var(--bleu-light); }
+
+/* ── Notes persistantes par adresse ─────────────────────────── */
+.mr-pin { font-size: .55rem; vertical-align: super; margin-left: 1px; font-style: normal; }
+.mn-note-perm {
+  font-size: .8rem; line-height: 1.45;
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm);
+  background: var(--jaune-light); color: #78350F;
+  margin-bottom: var(--sp-3);
+}
+
+/* ── Suivi des remises ──────────────────────────────────────── */
+.bilan-remises-suivi {
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1.5px solid var(--jaune);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.brs-ligne { display: flex; justify-content: space-between; font-size: .85rem; color: #78350F; }
+.brs-ligne--reste { font-weight: 700; font-size: .95rem; }
+.brs-du { color: var(--rouge-dark); }
+.brs-ok { color: #14532D; }
+.brs-histo {
+  margin-top: var(--sp-2); padding-top: var(--sp-2);
+  border-top: 1px dashed rgba(234,179,8,.5);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.brs-item {
+  display: grid; grid-template-columns: auto auto 1fr; gap: var(--sp-2);
+  font-size: .74rem; color: #92400E; align-items: baseline;
+}
+.brs-item > span:nth-child(2) { font-weight: 700; }
+.brs-detail { font-size: .68rem; opacity: .8; }
+
+.btn-remis {
+  display: flex; flex-direction: column; align-items: flex-start;
+  background: var(--vert-light); border: 1.5px solid var(--vert);
+  border-radius: var(--r-sm); padding: 3px 8px; cursor: pointer;
+  font-family: var(--font); font-size: .82rem; font-weight: 700; color: #14532D;
+}
+.btn-remis small { font-size: .62rem; font-weight: 400; opacity: .8; }
+.btn-remis:hover { background: var(--vert); color: var(--blanc); }
+
+.vr-resume {
+  display: flex; gap: var(--sp-2); margin-bottom: var(--sp-4);
+}
+.vr-resume > div {
+  flex: 1; text-align: center; padding: var(--sp-3);
+  background: var(--gris-fond); border-radius: var(--r-md);
+}
+.vr-resume span { display: block; font-size: .7rem; color: var(--ardoise-mid); }
+.vr-resume strong { display: block; font-size: 1.05rem; margin-top: 2px; }
+.vr-du  { background: var(--rouge-light) !important; color: var(--rouge-dark); }
+.vr-ok  { background: var(--vert-light) !important; color: #14532D; }
 </style>
 </head>
 <body>
@@ -1441,6 +1493,64 @@ function estInhabitee(secteur, adresse) {
   const norm = s => (s||'').toLowerCase().normalize('NFD')
     .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
   return secteur.inhabitees.some(x => norm(x) === norm(adresse));
+}
+
+// ── Notes persistantes par adresse ──────────────────────────────
+// Conservées d'une tournée à l'autre : "chien méchant", "sonner fort", etc.
+// Stockées dans le secteur : { "adresse normalisée": { texte, adresse, maj } }
+
+async function enregistrerNoteAdresse(secteurId, adresse, texte) {
+  const secteur = await fsGet(COLLECTIONS.SECTEURS, secteurId);
+  if (!secteur) throw new Error("Secteur introuvable");
+  const notes = secteur.notesAdresses || {};
+  const clef = normRue(adresse);
+  if (texte && texte.trim()) {
+    notes[clef] = { texte: texte.trim(), adresse, maj: new Date().toISOString() };
+  } else {
+    delete notes[clef];
+  }
+  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, { notesAdresses: notes });
+}
+
+function lireNoteAdresse(secteur, adresse) {
+  if (!secteur || !secteur.notesAdresses) return null;
+  return secteur.notesAdresses[normRue(adresse)] || null;
+}
+
+function toutesLesNotes(secteur) {
+  if (!secteur || !secteur.notesAdresses) return [];
+  return Object.values(secteur.notesAdresses)
+    .sort((a, b) => (a.adresse || '').localeCompare(b.adresse || '', 'fr'));
+}
+
+// ── Suivi des remises au trésorier ──────────────────────────────
+// Enregistré au niveau de l'équipe : liste des remises effectuées
+
+async function enregistrerRemise(equipeId, { montantEspeces = 0, montantCheques = 0, note = "", parQui = "" }) {
+  const equipe = await fsGet(COLLECTIONS.EQUIPES, equipeId);
+  if (!equipe) throw new Error("Équipe introuvable");
+  const remises = equipe.remises || [];
+  remises.push({
+    id: `r${Date.now()}`,
+    date: new Date().toISOString(),
+    especes: Number(montantEspeces) || 0,
+    cheques: Number(montantCheques) || 0,
+    total: (Number(montantEspeces) || 0) + (Number(montantCheques) || 0),
+    note, parQui
+  });
+  await fsUpdate(COLLECTIONS.EQUIPES, equipeId, { remises });
+  return remises;
+}
+
+async function supprimerRemise(equipeId, remiseId) {
+  const equipe = await fsGet(COLLECTIONS.EQUIPES, equipeId);
+  if (!equipe) throw new Error("Équipe introuvable");
+  const remises = (equipe.remises || []).filter(r => r.id !== remiseId);
+  await fsUpdate(COLLECTIONS.EQUIPES, equipeId, { remises });
+}
+
+function totalRemis(equipe) {
+  return (equipe?.remises || []).reduce((s, r) => s + (Number(r.total) || 0), 0);
 }
 
 // tournee.js — Logique métier tournée calendriers
@@ -3648,24 +3758,93 @@ function renderEquipesList(equipes) {
   list.innerHTML = `
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Équipe</th><th>PIN</th><th>Membres</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Équipe</th><th>PIN</th><th>Membres</th><th>Remis</th><th>Actions</th></tr></thead>
         <tbody>
-          ${equipes.map(e => `
+          ${equipes.map(e => {
+            const remis = totalRemis(e);
+            const nbR = (e.remises || []).length;
+            return `
             <tr>
               <td><strong>${e.nom}</strong></td>
               <td><code class="pin-code">${e.pin}</code></td>
               <td>${(e.membres || []).join(', ') || '—'}</td>
+              <td>${remis > 0
+                ? `<button class="btn-remis" onclick="voirRemises('${e.id}')">${formatMontant(remis)}<small>${nbR} remise${nbR>1?'s':''}</small></button>`
+                : '<span style="color:var(--ardoise-mid);font-size:.8rem">—</span>'}</td>
               <td class="td-actions">
                 <button class="btn btn--sm btn--ghost" onclick="editEquipe('${e.id}')">✏️</button>
                 <button class="btn btn--sm btn--danger" onclick="deleteEquipe('${e.id}')">🗑️</button>
               </td>
             </tr>
-          `).join('')}
+          `;}).join('')}
         </tbody>
       </table>
     </div>
   `;
 }
+
+
+// Détail des remises d'une équipe (vue admin)
+window.voirRemises = async (equipeId) => {
+  const equipe = await lireEquipe(equipeId);
+  if (!equipe) return;
+  const remises = (equipe.remises || []).slice().reverse();
+  const stats = await statsGlobalesTournee();
+  const eq = stats.parEquipe.find(x => x.id === equipeId);
+  const collecte = eq ? eq.montant : 0;
+  const remis = totalRemis(equipe);
+
+  let modal = document.getElementById("modal-remises");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "modal-remises"; modal.className = "modal hidden";
+    document.body.appendChild(modal);
+  }
+  modal.classList.remove("hidden");
+  modal.innerHTML = `
+    <div class="modal-inner">
+      <h2>Remises — ${equipe.nom}</h2>
+      <div class="vr-resume">
+        <div><span>Collecté</span><strong>${formatMontant(collecte)}</strong></div>
+        <div><span>Remis</span><strong>${formatMontant(remis)}</strong></div>
+        <div class="${collecte - remis > 0.01 ? 'vr-du' : 'vr-ok'}">
+          <span>${collecte - remis > 0.01 ? 'Reste dû' : 'À jour'}</span>
+          <strong>${collecte - remis > 0.01 ? formatMontant(collecte - remis) : '✅'}</strong>
+        </div>
+      </div>
+      ${remises.length === 0 ? '<p class="empty-state">Aucune remise enregistrée.</p>' : `
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Date</th><th>Espèces</th><th>Chèques</th><th>Total</th><th>Par</th><th></th></tr></thead>
+          <tbody>
+            ${remises.map(r => `
+              <tr>
+                <td>${new Date(r.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'2-digit'})}</td>
+                <td>${r.especes ? formatMontant(r.especes) : '—'}</td>
+                <td>${r.cheques ? formatMontant(r.cheques) : '—'}</td>
+                <td><strong>${formatMontant(r.total)}</strong></td>
+                <td>${r.parQui || '—'}</td>
+                <td><button class="btn btn--sm btn--danger" onclick="supprRemise('${equipeId}','${r.id}')">🗑️</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`}
+      <div class="modal-actions">
+        <button class="btn btn--ghost" onclick="document.getElementById('modal-remises').classList.add('hidden')">Fermer</button>
+      </div>
+    </div>
+  `;
+};
+
+window.supprRemise = async (equipeId, remiseId) => {
+  if (!confirm("Supprimer cette remise ?")) return;
+  try {
+    await supprimerRemise(equipeId, remiseId);
+    toast("Remise supprimée", "success");
+    voirRemises(equipeId);
+  } catch(e) { toast("Erreur : " + e.message, "error"); }
+};
 
 window.editEquipe = async (id) => {
   const equipes = await lireEquipes();
@@ -5278,6 +5457,33 @@ function majStatsTerrain(secteur, passages) {
 //  MON BILAN (récapitulatif équipier)
 // ════════════════════════════════════════════════════════════
 
+
+// Déclare une remise d'argent au trésorier
+window.declarerRemise = async (especesTotal, chequesTotal, dejaRemis) => {
+  const restant = (especesTotal + chequesTotal) - dejaRemis;
+  const v = prompt(
+    `Déclarer une remise au trésorier\n\n` +
+    `Reste à remettre : ${restant.toFixed(2)} €\n\n` +
+    `Saisis le montant remis en espèces, puis en chèques, séparés par un point-virgule.\n` +
+    `Exemple : 120;45.50\n\n` +
+    `(Laisse le second vide s'il n'y a pas de chèques : 120;)`,
+    `${Math.max(0, especesTotal).toFixed(2)};${Math.max(0, chequesTotal).toFixed(2)}`
+  );
+  if (!v) return;
+
+  const [e, c] = v.split(';').map(x => parseFloat((x||'').trim()) || 0);
+  if (e + c <= 0) { toast("Montant invalide", "error"); return; }
+
+  const qui = APP.membre || prompt("Qui a remis l'argent ?") || '';
+  try {
+    await enregistrerRemise(APP.equipeId, {
+      montantEspeces: e, montantCheques: c, parQui: qui
+    });
+    toast(`Remise de ${formatMontant(e+c)} enregistrée ✅`, "success");
+    afficherMonBilan();   // recharger le bilan
+  } catch(err) { toast("Erreur : " + err.message, "error"); }
+};
+
 window.afficherMonBilan = async () => {
   let modal = document.getElementById("modal-bilan");
   if (!modal) {
@@ -5292,6 +5498,9 @@ window.afficherMonBilan = async () => {
   try {
     const passages = await passagesDeLEquipe(APP.equipeId);
     const secteurs = await secteursParEquipe(APP.equipeId);
+    const equipe = await lireEquipe(APP.equipeId);
+    const remises = equipe?.remises || [];
+    const dejaRemis = totalRemis(equipe);
     const secteurMap = Object.fromEntries(secteurs.map(s => [s.id, s.nom]));
 
     // ── Cumul global ──
@@ -5359,6 +5568,30 @@ window.afficherMonBilan = async () => {
             <div class="bilan-remise-total"><span>Total</span><strong>${formatMontant(total)}</strong></div>
           </div>
           ${cartes > 0 ? `<div class="bilan-note">Les paiements carte sont déjà encaissés par SumUp.</div>` : ''}
+          ${(() => {
+            const aRemettre = especes + cheques;
+            const restant = aRemettre - dejaRemis;
+            return `
+            <div class="bilan-remises-suivi">
+              <div class="brs-ligne"><span>Déjà remis</span><strong>${formatMontant(dejaRemis)}</strong></div>
+              <div class="brs-ligne brs-ligne--reste ${restant > 0.01 ? 'brs-du' : 'brs-ok'}">
+                <span>${restant > 0.01 ? 'Reste à remettre' : 'À jour ✅'}</span>
+                <strong>${restant > 0.01 ? formatMontant(restant) : ''}</strong>
+              </div>
+              <button class="btn btn--primary btn--sm btn--full" onclick="declarerRemise(${especes.toFixed(2)}, ${cheques.toFixed(2)}, ${dejaRemis.toFixed(2)})">
+                ➕ Déclarer une remise
+              </button>
+              ${remises.length ? `<div class="brs-histo">
+                ${remises.slice().reverse().map(r => `
+                  <div class="brs-item">
+                    <span>${new Date(r.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+                    <span>${formatMontant(r.total)}</span>
+                    <span class="brs-detail">${r.especes?`💵 ${formatMontant(r.especes)}`:''}${r.cheques?` 📝 ${formatMontant(r.cheques)}`:''}${r.parQui?` · ${r.parQui}`:''}</span>
+                  </div>
+                `).join('')}
+              </div>` : ''}
+            </div>`;
+          })()}
         </div>
 
         <div class="bilan-detail">
@@ -5554,10 +5787,11 @@ function majModeRue(secteur, passages) {
           const inh = inhab.has(normA(adrN));
           const fus = trouverFusion(secteur, adrN);
           const nbFus = fus ? (fus.secondaires || []).length : 0;
+          const nt = lireNoteAdresse(secteur, adrN);
           return `<button class="mr-num ${st ? 'mr-num--fait' : ''} ${aj ? 'mr-num--ajout' : ''} ${inh ? 'mr-num--inhab' : ''}"
             style="${inh ? '' : c ? `background:${c.bg};border-color:${c.bg};color:#fff` : ''}"
-            title="${inh ? 'Inhabitée' : c ? c.label : 'Non visité'}${aj ? ' — ajouté' : ''}${nbFus ? ` — regroupe ${nbFus+1} adresses` : ''}"
-            onclick="saisirNumero('${n}','${rueActive.replace(/'/g,"\\'")}')">${n}${nbFus ? `<sup>+${nbFus}</sup>` : ''}</button>`;
+            title="${inh ? 'Inhabitée' : c ? c.label : 'Non visité'}${aj ? ' — ajouté' : ''}${nbFus ? ` — regroupe ${nbFus+1} adresses` : ''}${nt ? ` — 📌 ${nt.texte}` : ''}"
+            onclick="saisirNumero('${n}','${rueActive.replace(/'/g,"\\'")}')">${n}${nbFus ? `<sup>+${nbFus}</sup>` : ''}${nt ? '<i class="mr-pin">📌</i>' : ''}</button>`;
         }).join('')}
       </div>
     </div>`;
@@ -5674,6 +5908,7 @@ window.saisirNumero = async (numero, rue) => {
   const estAjout = lireComplements(secteur, rue).includes(numero);
   const fusion = trouverFusion(secteur, adresse);
   const inhabitee = estInhabitee(secteur, adresse);
+  const notePerm = lireNoteAdresse(secteur, adresse);
 
   let modal = document.getElementById("modal-num");
   if (!modal) {
@@ -5696,9 +5931,12 @@ window.saisirNumero = async (numero, rue) => {
         <button class="mn-btn mn-btn--refuse" onclick="mnChoisir('refuse')">🚫 Refus</button>
         <button class="mn-btn mn-btn--absent" onclick="mnChoisir('absent')">🔔 Absent</button>
       </div>
+      ${notePerm ? `<p class="mn-note-perm">📌 ${notePerm.texte}
+        <button class="mn-lien" onclick="mnNote()">modifier</button></p>` : ''}
       <div class="mn-outils">
         ${!inhabitee ? `<button class="mn-outil" onclick="mnInhabitee(true)">🏚️ Inhabitée</button>` : ''}
         <button class="mn-outil" onclick="mnFusionner()">🔗 Même boîte que…</button>
+        ${!notePerm ? `<button class="mn-outil" onclick="mnNote()">📌 Note</button>` : ''}
       </div>
       <div id="mn-montant-box" class="hidden">
         <label class="label">Montant (€)</label>
@@ -5804,6 +6042,31 @@ window.mnAnnulerFusion = async (principale) => {
     await annulerFusion(ctx.secteurId, principale);
     document.getElementById("modal-num")?.classList.add("hidden");
     toast("Adresses séparées", "success");
+    rafraichirModeRue();
+  } catch(e) { toast("Erreur : " + e.message, "error"); }
+};
+
+
+// Note persistante sur une adresse (conservée d'une tournée à l'autre)
+window.mnNote = async () => {
+  const ctx = window._mnCtx;
+  if (!ctx) return;
+  const secteur = await lireSecteur(ctx.secteurId);
+  const actuelle = lireNoteAdresse(secteur, ctx.adresse);
+
+  const v = prompt(
+    `Note pour « ${ctx.adresse} »\n\n` +
+    `Exemples : chien méchant · sonner fort · préfère le samedi · code portail 1234\n\n` +
+    `Cette note sera visible par toute l'équipe et conservée pour les prochaines tournées.\n` +
+    `(Laisse vide pour la supprimer)`,
+    actuelle?.texte || ''
+  );
+  if (v === null) return;
+
+  try {
+    await enregistrerNoteAdresse(ctx.secteurId, ctx.adresse, v);
+    document.getElementById("modal-num")?.classList.add("hidden");
+    toast(v.trim() ? "Note enregistrée 📌" : "Note supprimée", "success");
     rafraichirModeRue();
   } catch(e) { toast("Erreur : " + e.message, "error"); }
 };
