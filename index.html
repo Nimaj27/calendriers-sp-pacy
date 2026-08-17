@@ -1099,14 +1099,17 @@ function ecouterSecteursEquipe(equipeId, callback) {
 }
 async function recalculerTotauxSecteur(secteurId) {
   const passages = await fsQuery(COLLECTIONS.PASSAGES, where("secteurId", "==", secteurId));
-  let totalCollecte=0, nbFoyersVisites=0, nbFoyersAbsents=0;
+  let totalCollecte=0, nbFoyersVisites=0, nbFoyersAbsents=0, nbCalendriers=0;
   for (const p of passages) {
-    if (p.statut==="don")    { totalCollecte += Number(p.montant||0); nbFoyersVisites++; }
+    // Boîtes "traitées" : don, offert et refus (l'absent reste à revoir)
+    if (p.statut==="don")    { totalCollecte += Number(p.montant||0); nbFoyersVisites++; nbCalendriers++; }
+    if (p.statut==="offert") { nbFoyersVisites++; nbCalendriers++; }
     if (p.statut==="refuse") { nbFoyersVisites++; }
-    if (p.statut==="absent") { nbFoyersAbsents++; }
+    if (p.statut==="absent" || p.statut==="relance") { nbFoyersAbsents++; }
   }
-  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, { totalCollecte, nbFoyersVisites, nbFoyersAbsents, nbFoyersTotal: passages.length });
-  return { totalCollecte, nbFoyersVisites, nbFoyersAbsents, nbFoyersTotal: passages.length };
+  const totaux = { totalCollecte, nbFoyersVisites, nbFoyersAbsents, nbCalendriers, nbFoyersTotal: passages.length };
+  await fsUpdate(COLLECTIONS.SECTEURS, secteurId, totaux);
+  return totaux;
 }
 async function statsGlobales() {
   const secteurs = await lireSecteurs();
@@ -4841,7 +4844,7 @@ function majStatsTerrain(secteur, passages) {
   const aujourdhui = new Date().toISOString().slice(0, 10);
 
   // Traités = dons + refus (les absents restent « à faire »)
-  const traites  = passages.filter(p => p.statut === "don" || p.statut === "refuse").length;
+  const traites  = passages.filter(p => p.statut === "don" || p.statut === "offert" || p.statut === "refuse").length;
   const absents  = passages.filter(p => p.statut === "absent" || p.statut === "relance").length;
   const restantes = totalBoites > 0 ? Math.max(0, totalBoites - traites) : null;
 
