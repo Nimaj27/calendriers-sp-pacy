@@ -1021,6 +1021,101 @@ body {
 .bj-secteurs { font-size: .74rem; color: var(--ardoise-mid); }
 .bj-detail { font-size: .7rem; color: var(--ardoise-mid); margin-top: 2px; }
 .bilan-vide { font-size: .85rem; color: var(--ardoise-mid); font-style: italic; }
+
+/* ── Mode « rue en cours » ──────────────────────────────────── */
+.mode-rue { margin: 0 var(--sp-4) var(--sp-3); }
+
+.mr-toggle {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  width: 100%; padding: var(--sp-3);
+  background: var(--blanc); border: 1.5px dashed var(--bleu);
+  border-radius: var(--r-md); cursor: pointer;
+  font-family: var(--font); font-size: .9rem; font-weight: 700; color: var(--bleu);
+}
+.mr-toggle:hover { background: var(--bleu-light); border-style: solid; }
+.mr-toggle-sub { font-size: .72rem; font-weight: 400; color: var(--ardoise-mid); }
+
+.mr-selecteur {
+  background: var(--blanc); border: 1.5px solid var(--bleu);
+  border-radius: var(--r-md); padding: var(--sp-3); margin-top: var(--sp-2);
+}
+.mr-sel-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: .85rem; font-weight: 700; color: var(--ardoise); margin-bottom: var(--sp-2);
+}
+.mr-fermer, .mr-quitter {
+  background: none; border: 1.5px solid var(--gris-bord); border-radius: var(--r-sm);
+  cursor: pointer; font-family: var(--font); font-size: .74rem; font-weight: 600;
+  color: var(--ardoise-mid); padding: 4px 9px;
+}
+.mr-quitter:hover, .mr-fermer:hover { background: var(--gris-fond); }
+.mr-liste { display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; margin-top: var(--sp-2); }
+.mr-rue {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3); background: var(--gris-fond);
+  border: 1.5px solid transparent; border-radius: var(--r-sm);
+  cursor: pointer; font-family: var(--font); text-align: left; width: 100%;
+}
+.mr-rue:hover { border-color: var(--bleu); background: var(--bleu-light); }
+.mr-rue-nom { font-size: .84rem; color: var(--ardoise); }
+.mr-rue-prog { font-size: .76rem; font-weight: 700; flex-shrink: 0; }
+
+.mr-grille-wrap {
+  background: var(--blanc); border: 1.5px solid var(--bleu);
+  border-radius: var(--r-md); padding: var(--sp-4);
+}
+.mr-grille-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: var(--sp-2); margin-bottom: var(--sp-2);
+}
+.mr-grille-rue { font-size: .95rem; font-weight: 700; color: var(--ardoise); }
+.mr-grille-prog { font-size: .74rem; color: var(--ardoise-mid); }
+
+.mr-cote { margin-top: var(--sp-3); }
+.mr-cote-titre {
+  font-size: .72rem; font-weight: 700; color: var(--ardoise-mid);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: var(--sp-2);
+}
+.mr-nums { display: flex; flex-wrap: wrap; gap: 5px; }
+.mr-num {
+  min-width: 44px; min-height: 40px; padding: 7px 6px;
+  background: var(--blanc); border: 1.5px solid var(--gris-bord);
+  border-radius: var(--r-sm); cursor: pointer;
+  font-family: var(--font); font-size: .88rem; font-weight: 700;
+  color: var(--ardoise); transition: transform .1s;
+}
+.mr-num:active { transform: scale(.9); }
+.mr-num--fait { box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+
+.mr-legende {
+  display: flex; flex-wrap: wrap; gap: var(--sp-3);
+  margin-top: var(--sp-4); padding-top: var(--sp-3);
+  border-top: 1px solid var(--ardoise-light);
+  font-size: .74rem; color: var(--ardoise-mid);
+}
+.mr-leg { display: flex; align-items: center; gap: 5px; }
+.mr-leg i { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+.mr-vide { font-size: .85rem; color: var(--ardoise-mid); text-align: center; padding: var(--sp-4); }
+
+/* ── Modale de saisie d'un numéro ───────────────────────────── */
+.mn-modal { max-width: 380px; }
+.mn-existant {
+  font-size: .82rem; padding: var(--sp-2) var(--sp-3);
+  background: var(--jaune-light); color: #78350F;
+  border-radius: var(--r-sm); margin-bottom: var(--sp-3);
+}
+.mn-statuts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.mn-btn {
+  padding: var(--sp-4) var(--sp-2); border: 2px solid var(--gris-bord);
+  border-radius: var(--r-md); background: var(--blanc); cursor: pointer;
+  font-family: var(--font); font-size: .88rem; font-weight: 700; color: var(--ardoise);
+  transition: all .12s;
+}
+.mn-btn:active { transform: scale(.96); }
+.mn-btn--don.mn-btn--sel    { background:#16A34A; border-color:#16A34A; color:#fff; }
+.mn-btn--offert.mn-btn--sel { background:#2563EB; border-color:#2563EB; color:#fff; }
+.mn-btn--refuse.mn-btn--sel { background:#EF4444; border-color:#EF4444; color:#fff; }
+.mn-btn--absent.mn-btn--sel { background:#EAB308; border-color:#EAB308; color:#fff; }
 </style>
 </head>
 <body>
@@ -2170,6 +2265,34 @@ function nbFoyersSecteur(secteur) {
   const idxOk = new Set();
   data.r.forEach((r, i) => { if (cibles.has(norm(r))) idxOk.add(i); });
   return data.p.filter(p => idxOk.has(p[1])).length;
+}
+
+// Liste les rues d'un secteur avec leur nombre de foyers, triées alphabétiquement
+function ruesDuSecteur(secteur) {
+  if (!secteur || !secteur.commune) return [];
+  const data = GEO_ADRESSES[secteur.commune];
+  if (!data) return [];
+
+  const norm = s => (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+  // Rues à considérer : celles du secteur, ou toutes si non précisées
+  let idxOk;
+  if (secteur.rues && secteur.rues.length > 0) {
+    const cibles = new Set(secteur.rues.map(norm));
+    idxOk = new Set();
+    data.r.forEach((r, i) => { if (cibles.has(norm(r))) idxOk.add(i); });
+  } else {
+    idxOk = new Set(data.r.map((_, i) => i));
+  }
+
+  const compte = {};
+  data.p.forEach(p => { if (idxOk.has(p[1])) compte[p[1]] = (compte[p[1]] || 0) + 1; });
+
+  return Object.entries(compte)
+    .map(([i, n]) => ({ rue: data.r[i], foyers: n }))
+    .sort((a, b) => a.rue.localeCompare(b.rue, 'fr'));
 }
 
 // ============================================================
@@ -4356,6 +4479,7 @@ async function renderTerrainPassages() {
       <div id="terrain-secteur-map" style="height:200px;margin:0 16px 16px;border-radius:12px;overflow:hidden;border:1.5px solid var(--gris-bord);"></div>
 
       <div id="terrain-stats" class="terrain-stats"></div>
+      <div id="mode-rue" class="mode-rue"></div>
 
       <!-- Formulaire passage rapide -->
       <div class="passage-form">
@@ -4653,6 +4777,8 @@ async function renderTerrainPassages() {
   const unsub = ecouterPassagesSecteur(secteurId, (passages) => {
     // ── Bandeau de statistiques du secteur ──
     majStatsTerrain(secteur, passages);
+    // ── Mode « rue en cours » ──
+    majModeRue(secteur, passages);
 
     // ── Bloc « Mes foyers à relancer » sur ce secteur ──
     const boxRel = document.getElementById("terrain-relances");
@@ -5098,6 +5224,269 @@ window.afficherMonBilan = async () => {
       </div>
     </div>`;
   }
+};
+
+
+// ════════════════════════════════════════════════════════════
+//  MODE « RUE EN COURS » — saisie rapide par grille de numéros
+// ════════════════════════════════════════════════════════════
+
+const COULEURS_STATUT_NUM = {
+  don:     { bg: "#16A34A", label: "Don" },
+  offert:  { bg: "#2563EB", label: "Offert" },
+  refuse:  { bg: "#EF4444", label: "Refus" },
+  absent:  { bg: "#EAB308", label: "Absent" },
+  relance: { bg: "#F97316", label: "À relancer" }
+};
+
+// Normalise une adresse pour comparaison (numéro + rue)
+function normAdr(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// Affiche le sélecteur de rue, ou la grille si une rue est active
+function majModeRue(secteur, passages) {
+  const box = document.getElementById("mode-rue");
+  if (!box) return;
+
+  const rues = ruesDuSecteur(secteur);
+  if (rues.length === 0) { box.innerHTML = ''; return; }
+
+  const rueActive = APP._rueActive;
+
+  // ── Pas de rue sélectionnée : afficher le sélecteur ──
+  if (!rueActive) {
+    // Calculer l'avancement de chaque rue
+    const avancement = {};
+    for (const { rue, foyers } of rues) {
+      let numeros = [];
+      try { numeros = numerosDeRue(secteur.commune, rue); } catch(e) {}
+      const faits = numeros.filter(n =>
+        passages.some(p => normAdr(p.adresse) === normAdr(`${n} ${rue}`))
+      ).length;
+      avancement[rue] = { faits, total: foyers };
+    }
+
+    box.innerHTML = `
+      <button class="mr-toggle" onclick="ouvrirSelecteurRue()">
+        📋 Saisie rapide par rue
+        <span class="mr-toggle-sub">${rues.length} rue${rues.length>1?'s':''} dans ce secteur</span>
+      </button>
+      <div id="mr-selecteur" class="mr-selecteur hidden">
+        <div class="mr-sel-head">
+          Choisis une rue
+          <button class="mr-fermer" onclick="document.getElementById('mr-selecteur').classList.add('hidden')">✕</button>
+        </div>
+        <input id="mr-recherche" class="input input--sm" placeholder="🔍 Filtrer les rues…" autocomplete="off">
+        <div id="mr-liste" class="mr-liste">
+          ${rues.map(({rue, foyers}) => {
+            const a = avancement[rue];
+            const pct = a.total ? Math.round((a.faits/a.total)*100) : 0;
+            const col = pct >= 100 ? '#16A34A' : pct > 0 ? '#EAB308' : 'var(--gris-bord)';
+            return `<button class="mr-rue" data-rue="${rue.replace(/"/g,'&quot;')}"
+                      onclick="activerRue('${rue.replace(/'/g,"\\'")}')">
+              <span class="mr-rue-nom">${rue}</span>
+              <span class="mr-rue-prog" style="color:${col}">${a.faits}/${a.total}</span>
+            </button>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    // Filtre de recherche
+    const rech = document.getElementById("mr-recherche");
+    rech?.addEventListener("input", () => {
+      const q = normAdr(rech.value);
+      document.querySelectorAll("#mr-liste .mr-rue").forEach(b => {
+        b.style.display = !q || normAdr(b.dataset.rue).includes(q) ? '' : 'none';
+      });
+    });
+    return;
+  }
+
+  // ── Rue active : afficher la grille de numéros ──
+  let numeros = [];
+  try { numeros = numerosDeRue(secteur.commune, rueActive); } catch(e) {}
+  if (numeros.length === 0) {
+    box.innerHTML = `<div class="mr-vide">Aucun numéro connu pour « ${rueActive} ».
+      <button class="mr-quitter" onclick="quitterRue()">Retour</button></div>`;
+    return;
+  }
+
+  // Statut de chaque numéro d'après les passages enregistrés
+  const statuts = {};
+  for (const n of numeros) {
+    const p = passages.find(x => normAdr(x.adresse) === normAdr(`${n} ${rueActive}`));
+    if (p) statuts[n] = p.statut;
+  }
+  const faits = Object.keys(statuts).length;
+  const pct = Math.round((faits / numeros.length) * 100);
+
+  // Séparer pairs et impairs (les deux trottoirs)
+  const impairs = numeros.filter(n => (parseInt(n) % 2) === 1);
+  const pairs   = numeros.filter(n => (parseInt(n) % 2) === 0);
+
+  const grille = (liste, titre) => liste.length === 0 ? '' : `
+    <div class="mr-cote">
+      <div class="mr-cote-titre">${titre}</div>
+      <div class="mr-nums">
+        ${liste.map(n => {
+          const st = statuts[n];
+          const c = st ? COULEURS_STATUT_NUM[st] : null;
+          return `<button class="mr-num ${st ? 'mr-num--fait' : ''}"
+            style="${c ? `background:${c.bg};border-color:${c.bg};color:#fff` : ''}"
+            title="${c ? c.label : 'Non visité'}"
+            onclick="saisirNumero('${n}','${rueActive.replace(/'/g,"\\'")}')">${n}</button>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  box.innerHTML = `
+    <div class="mr-grille-wrap">
+      <div class="mr-grille-head">
+        <div>
+          <div class="mr-grille-rue">${rueActive}</div>
+          <div class="mr-grille-prog">${faits} / ${numeros.length} traités · ${pct}%</div>
+        </div>
+        <button class="mr-quitter" onclick="quitterRue()">Changer de rue</button>
+      </div>
+      <div class="ts-barre"><div class="ts-barre-fill" style="width:${pct}%;background:${pct>=100?'#16A34A':pct>0?'#EAB308':'#EF4444'}"></div></div>
+
+      ${grille(impairs, 'Numéros impairs')}
+      ${grille(pairs, 'Numéros pairs')}
+
+      <div class="mr-legende">
+        ${Object.entries(COULEURS_STATUT_NUM).filter(([k]) => k !== 'relance').map(([k,v]) =>
+          `<span class="mr-leg"><i style="background:${v.bg}"></i>${v.label}</span>`
+        ).join('')}
+        <span class="mr-leg"><i style="background:#fff;border:1.5px solid var(--gris-bord)"></i>Non visité</span>
+      </div>
+    </div>
+  `;
+}
+
+window.ouvrirSelecteurRue = () => {
+  document.getElementById("mr-selecteur")?.classList.remove("hidden");
+  document.getElementById("mr-recherche")?.focus();
+};
+
+window.activerRue = (rue) => {
+  APP._rueActive = rue;
+  naviguer("#terrain-passages");
+};
+
+window.quitterRue = () => {
+  APP._rueActive = null;
+  naviguer("#terrain-passages");
+};
+
+// Saisie rapide d'un numéro depuis la grille
+window.saisirNumero = async (numero, rue) => {
+  const secteurId = sessionStorage.getItem("secteurActif");
+  if (!secteurId) return;
+  const secteur = await lireSecteur(secteurId);
+  const adresse = `${numero} ${rue}`;
+
+  // Vérifier s'il existe déjà un passage à cette adresse
+  const passages = await passagesDuSecteur(secteurId);
+  const existant = passages.find(p => normAdr(p.adresse) === normAdr(adresse));
+
+  let modal = document.getElementById("modal-num");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "modal-num"; modal.className = "modal hidden";
+    document.body.appendChild(modal);
+  }
+  modal.classList.remove("hidden");
+  modal.innerHTML = `
+    <div class="modal-inner mn-modal">
+      <h2>${adresse}</h2>
+      ${existant ? `<p class="mn-existant">Déjà enregistré : <strong>${STATUT_PASSAGE_LABEL[existant.statut]}</strong>${existant.statut==='don'?` (${formatMontant(existant.montant)})`:''}</p>` : ''}
+      <div class="mn-statuts">
+        <button class="mn-btn mn-btn--don" onclick="mnChoisir('don')">💰 Don</button>
+        <button class="mn-btn mn-btn--offert" onclick="mnChoisir('offert')">🎁 Offert</button>
+        <button class="mn-btn mn-btn--refuse" onclick="mnChoisir('refuse')">🚫 Refus</button>
+        <button class="mn-btn mn-btn--absent" onclick="mnChoisir('absent')">🔔 Absent</button>
+      </div>
+      <div id="mn-montant-box" class="hidden">
+        <label class="label">Montant (€)</label>
+        <input id="mn-montant" class="input input--montant" type="number" inputmode="decimal" min="0" step="0.50" placeholder="0.00">
+        <div class="mode-paiement">
+          <button class="mode-btn mode-btn--active" data-mn-mode="especes" onclick="mnMode('especes')">💵 Espèces</button>
+          <button class="mode-btn" data-mn-mode="cheque" onclick="mnMode('cheque')">📝 Chèque</button>
+          <button class="mode-btn" data-mn-mode="carte" onclick="mnMode('carte')">💳 Carte</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="mn-valider" class="btn btn--primary" disabled>Enregistrer</button>
+        ${existant ? `<button class="btn btn--danger" onclick="mnSupprimer('${existant.id}','${secteurId}')">🗑️ Supprimer</button>` : ''}
+        <button class="btn btn--ghost" onclick="document.getElementById('modal-num').classList.add('hidden')">Annuler</button>
+      </div>
+    </div>
+  `;
+
+  window._mnStatut = null;
+  window._mnMode = "especes";
+  window._mnCtx = { secteurId, secteur, adresse, existantId: existant?.id || null };
+
+  document.getElementById("mn-valider")?.addEventListener("click", async () => {
+    const btn = document.getElementById("mn-valider");
+    const st = window._mnStatut;
+    if (!st) return;
+    const montant = parseFloat(document.getElementById("mn-montant")?.value || "0");
+    if (st === "don" && (!montant || montant <= 0)) { toast("Saisis le montant", "error"); return; }
+    setLoading(btn, true);
+    try {
+      const ctx = window._mnCtx;
+      const data = {
+        adresse: ctx.adresse, statut: st,
+        montant: st === "don" ? Number(montant) : 0,
+        modePaiement: st === "don" ? window._mnMode : null,
+        aRelancer: st === "absent"
+      };
+      if (ctx.existantId) {
+        await modifierPassage(ctx.existantId, { ...data, secteurId: ctx.secteurId });
+      } else {
+        await ajouterPassage({
+          ...data, secteurId: ctx.secteurId,
+          equipeId: APP.equipeId, equipeNom: APP.equipeNom,
+          nomDonateur: "", note: "", saisiPar: APP.membre || ""
+        });
+      }
+      document.getElementById("modal-num").classList.add("hidden");
+      toast(`${ctx.adresse} → ${STATUT_PASSAGE_LABEL[st]}`, "success");
+    } catch(e) {
+      toast("Erreur : " + e.message, "error");
+      setLoading(btn, false);
+    }
+  });
+};
+
+window.mnChoisir = (statut) => {
+  window._mnStatut = statut;
+  document.querySelectorAll(".mn-btn").forEach(b =>
+    b.classList.toggle("mn-btn--sel", b.classList.contains(`mn-btn--${statut}`)));
+  const box = document.getElementById("mn-montant-box");
+  box && (statut === "don" ? box.classList.remove("hidden") : box.classList.add("hidden"));
+  document.getElementById("mn-valider").disabled = false;
+  if (statut === "don") document.getElementById("mn-montant")?.focus();
+};
+
+window.mnMode = (mode) => {
+  window._mnMode = mode;
+  document.querySelectorAll("[data-mn-mode]").forEach(b =>
+    b.classList.toggle("mode-btn--active", b.dataset.mnMode === mode));
+};
+
+window.mnSupprimer = async (passageId, secteurId) => {
+  if (!confirm("Supprimer ce passage ?")) return;
+  try {
+    await supprimerPassage(passageId, secteurId);
+    document.getElementById("modal-num").classList.add("hidden");
+    toast("Passage supprimé", "success");
+  } catch(e) { toast("Erreur : " + e.message, "error"); }
 };
 
 // ════════════════════════════════════════════════════════════
