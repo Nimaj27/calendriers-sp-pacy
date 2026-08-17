@@ -962,6 +962,65 @@ body {
 .ts-stock-init span { font-weight: 700; color: var(--bleu); }
 .ts-stock-init:hover { border-color: var(--bleu); background: var(--bleu-light); }
 .ts-val small { font-size: .7rem; color: var(--bleu); font-weight: 700; }
+
+/* ── Mon bilan (équipier) ───────────────────────────────────── */
+.bilan-modal { max-width: 480px; }
+.bilan-sous { font-size: .85rem; color: var(--ardoise-mid); margin: -8px 0 var(--sp-4); }
+.bilan-hero {
+  display: flex; gap: var(--sp-3); margin-bottom: var(--sp-4);
+}
+.bilan-hero-item {
+  flex: 1; text-align: center; padding: var(--sp-4);
+  background: var(--ardoise); color: var(--blanc);
+  border-radius: var(--r-md);
+}
+.bilan-hero-item--argent { background: var(--vert); }
+.bh-val { display: block; font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.bh-lbl { display: block; font-size: .72rem; opacity: .85; margin-top: 2px; }
+
+.bilan-remise {
+  background: var(--jaune-light); border: 1.5px solid var(--jaune);
+  border-radius: var(--r-md); padding: var(--sp-4); margin-bottom: var(--sp-4);
+}
+.bilan-remise-titre { font-size: .88rem; font-weight: 700; color: #78350F; margin-bottom: var(--sp-3); }
+.bilan-remise-lignes { display: flex; flex-direction: column; gap: 6px; font-size: .88rem; }
+.bilan-remise-lignes > div { display: flex; justify-content: space-between; color: #78350F; }
+.bilan-remise-total {
+  border-top: 1.5px solid var(--jaune); padding-top: 6px; margin-top: 2px;
+  font-size: 1rem; font-weight: 700;
+}
+.bilan-note { font-size: .72rem; color: #92400E; margin-top: var(--sp-2); font-style: italic; }
+
+.bilan-detail {
+  display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4);
+}
+.bd-item {
+  flex: 1 1 auto; padding: var(--sp-2) var(--sp-3);
+  background: var(--gris-fond); border-radius: var(--r-sm);
+  font-size: .8rem; color: var(--ardoise-mid); text-align: center;
+}
+.bd-item strong { color: var(--ardoise); font-size: .95rem; }
+
+.bilan-avancement {
+  background: var(--gris-fond); border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-4);
+}
+.ba-head { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: var(--sp-2); }
+.ba-head strong { color: var(--ardoise); }
+.ba-detail { font-size: .74rem; color: var(--ardoise-mid); margin-top: var(--sp-2); }
+
+.bilan-jours h3 { font-size: .95rem; font-weight: 700; margin-bottom: var(--sp-3); }
+.bj-ligne {
+  padding: var(--sp-3) 0; border-bottom: 1px solid var(--ardoise-light);
+}
+.bj-ligne:last-child { border: none; }
+.bj-date { font-size: .88rem; font-weight: 700; color: var(--ardoise); text-transform: capitalize; }
+.bj-chiffres { display: flex; gap: var(--sp-3); margin: 3px 0; }
+.bj-cal  { font-size: .88rem; font-weight: 700; color: var(--bleu); }
+.bj-mont { font-size: .88rem; font-weight: 700; color: var(--vert); }
+.bj-secteurs { font-size: .74rem; color: var(--ardoise-mid); }
+.bj-detail { font-size: .7rem; color: var(--ardoise-mid); margin-top: 2px; }
+.bilan-vide { font-size: .85rem; color: var(--ardoise-mid); font-style: italic; }
 </style>
 </head>
 <body>
@@ -4119,6 +4178,7 @@ async function renderTerrain() {
         <div class="terrain-brand">🚒 SP Pacy — Tournée Calendriers</div>
         <div class="terrain-equipe">👥 ${APP.equipeNom}${APP.membre ? ` · ${APP.membre}` : ''}</div>
         ${renderNetworkBadge()}
+        <button id="btn-mon-bilan" class="btn btn--ghost btn--sm" title="Mon bilan">📊</button>
         <button id="btn-logout-terrain" class="btn btn--ghost btn--sm">Quitter</button>
       </header>
       <div id="terrain-content">
@@ -4129,6 +4189,8 @@ async function renderTerrain() {
 
   const unsubNet = bindNetworkBadge();
   APP.unsubs.push(unsubNet);
+
+  document.getElementById("btn-mon-bilan")?.addEventListener("click", () => afficherMonBilan());
 
   document.getElementById("btn-logout-terrain")?.addEventListener("click", () => {
     sessionStorage.removeItem("equipe");
@@ -4900,6 +4962,143 @@ function majStatsTerrain(secteur, passages) {
     </div>
   `;
 }
+
+
+// ════════════════════════════════════════════════════════════
+//  MON BILAN (récapitulatif équipier)
+// ════════════════════════════════════════════════════════════
+
+window.afficherMonBilan = async () => {
+  let modal = document.getElementById("modal-bilan");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "modal-bilan";
+    modal.className = "modal hidden";
+    document.body.appendChild(modal);
+  }
+  modal.classList.remove("hidden");
+  modal.innerHTML = `<div class="modal-inner"><div class="loader">Calcul de ton bilan…</div></div>`;
+
+  try {
+    const passages = await passagesDeLEquipe(APP.equipeId);
+    const secteurs = await secteursParEquipe(APP.equipeId);
+    const secteurMap = Object.fromEntries(secteurs.map(s => [s.id, s.nom]));
+
+    // ── Cumul global ──
+    const dons     = passages.filter(p => p.statut === "don");
+    const offerts  = passages.filter(p => p.statut === "offert");
+    const refus    = passages.filter(p => p.statut === "refuse");
+    const absents  = passages.filter(p => p.statut === "absent" || p.statut === "relance");
+    const especes  = dons.filter(p => p.modePaiement === "especes").reduce((s,p) => s + Number(p.montant||0), 0);
+    const cheques  = dons.filter(p => p.modePaiement === "cheque").reduce((s,p) => s + Number(p.montant||0), 0);
+    const cartes   = dons.filter(p => p.modePaiement === "carte").reduce((s,p) => s + Number(p.montant||0), 0);
+    const total    = especes + cheques + cartes;
+    const calendriers = dons.length + offerts.length;
+
+    // ── Détail par jour ──
+    const parJour = {};
+    for (const p of passages) {
+      const j = (p.datePassage || '').slice(0, 10);
+      if (!j) continue;
+      if (!parJour[j]) parJour[j] = { dons:0, offerts:0, refus:0, absents:0, montant:0, secteurs:new Set() };
+      const d = parJour[j];
+      if (p.statut === "don")    { d.dons++;    d.montant += Number(p.montant||0); }
+      if (p.statut === "offert") d.offerts++;
+      if (p.statut === "refuse") d.refus++;
+      if (p.statut === "absent" || p.statut === "relance") d.absents++;
+      if (p.secteurId && secteurMap[p.secteurId]) d.secteurs.add(secteurMap[p.secteurId]);
+    }
+    const jours = Object.entries(parJour).sort((a,b) => b[0].localeCompare(a[0]));
+
+    const fmtJour = (iso) => {
+      const [a,m,j] = iso.split('-');
+      return new Date(`${a}-${m}-${j}T12:00`).toLocaleDateString('fr-FR',
+        { weekday:'short', day:'numeric', month:'short' });
+    };
+
+    // ── Avancement sur les secteurs ──
+    let totalBoites = 0, traites = 0;
+    for (const s of secteurs) {
+      totalBoites += nbFoyersSecteur(s);
+      traites += (s.nbFoyersVisites || 0);
+    }
+    const pctGlobal = totalBoites > 0 ? Math.round((traites/totalBoites)*100) : 0;
+
+    modal.innerHTML = `
+      <div class="modal-inner bilan-modal">
+        <h2>📊 Mon bilan</h2>
+        <p class="bilan-sous">${APP.equipeNom}${APP.membre ? ` · ${APP.membre}` : ''}</p>
+
+        <div class="bilan-hero">
+          <div class="bilan-hero-item">
+            <span class="bh-val">${calendriers}</span>
+            <span class="bh-lbl">calendrier${calendriers!==1?'s':''} placé${calendriers!==1?'s':''}</span>
+          </div>
+          <div class="bilan-hero-item bilan-hero-item--argent">
+            <span class="bh-val">${formatMontant(total)}</span>
+            <span class="bh-lbl">collecté</span>
+          </div>
+        </div>
+
+        <div class="bilan-remise">
+          <div class="bilan-remise-titre">💰 À remettre au trésorier</div>
+          <div class="bilan-remise-lignes">
+            <div><span>💵 Espèces</span><strong>${formatMontant(especes)}</strong></div>
+            <div><span>📝 Chèques</span><strong>${formatMontant(cheques)}</strong></div>
+            ${cartes > 0 ? `<div><span>💳 Carte (SumUp)</span><strong>${formatMontant(cartes)}</strong></div>` : ''}
+            <div class="bilan-remise-total"><span>Total</span><strong>${formatMontant(total)}</strong></div>
+          </div>
+          ${cartes > 0 ? `<div class="bilan-note">Les paiements carte sont déjà encaissés par SumUp.</div>` : ''}
+        </div>
+
+        <div class="bilan-detail">
+          <div class="bd-item"><strong>${dons.length}</strong> don${dons.length!==1?'s':''}</div>
+          ${offerts.length ? `<div class="bd-item"><strong>${offerts.length}</strong> offert${offerts.length!==1?'s':''}</div>` : ''}
+          <div class="bd-item"><strong>${refus.length}</strong> refus</div>
+          <div class="bd-item"><strong>${absents.length}</strong> absent${absents.length!==1?'s':''}</div>
+        </div>
+
+        ${totalBoites > 0 ? `
+        <div class="bilan-avancement">
+          <div class="ba-head">
+            <span>Avancement de mes secteurs</span>
+            <strong>${pctGlobal}%</strong>
+          </div>
+          <div class="ts-barre"><div class="ts-barre-fill" style="width:${pctGlobal}%;background:${pctGlobal>=90?'#16A34A':pctGlobal>=60?'#EAB308':'#F97316'}"></div></div>
+          <div class="ba-detail">${traites} / ${totalBoites} boîtes traitées · ${Math.max(0,totalBoites-traites)} restantes</div>
+        </div>` : ''}
+
+        <div class="bilan-jours">
+          <h3>Détail par sortie</h3>
+          ${jours.length === 0 ? '<p class="bilan-vide">Aucune sortie enregistrée.</p>' :
+            jours.map(([iso, d]) => `
+            <div class="bj-ligne">
+              <div class="bj-date">${fmtJour(iso)}</div>
+              <div class="bj-chiffres">
+                <span class="bj-cal">${d.dons + d.offerts} cal.</span>
+                <span class="bj-mont">${formatMontant(d.montant)}</span>
+              </div>
+              <div class="bj-secteurs">${[...d.secteurs].join(' · ') || '—'}</div>
+              <div class="bj-detail">${d.dons} don${d.dons!==1?'s':''}${d.offerts?` · ${d.offerts} offert${d.offerts!==1?'s':''}`:''} · ${d.refus} refus · ${d.absents} absent${d.absents!==1?'s':''}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn--primary" onclick="document.getElementById('modal-bilan').classList.add('hidden')">Fermer</button>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    modal.innerHTML = `<div class="modal-inner">
+      <h2>Erreur</h2>
+      <p>${e.message}</p>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" onclick="document.getElementById('modal-bilan').classList.add('hidden')">Fermer</button>
+      </div>
+    </div>`;
+  }
+};
 
 // ════════════════════════════════════════════════════════════
 //  RACCOURCIS DE SAISIE (fluidité terrain)
