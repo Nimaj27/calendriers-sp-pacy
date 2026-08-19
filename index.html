@@ -3676,129 +3676,210 @@ window.ficheDeRoute = async (secteurId) => {
   if (!secteur) { toast("Secteur introuvable", "error"); return; }
 
   const passages = await passagesDuSecteur(secteurId);
-  const rues = ruesDuSecteur(secteur);
+  const rues  = ruesDuSecteur(secteur);
   const notes = toutesLesNotes(secteur);
-  const secondaires = new Set(adressesSecondaires(secteur).map(a =>
-    (a||'').toLowerCase().replace(/[^a-z0-9]/g,'')));
-  const inhab = new Set((secteur.inhabitees||[]).map(a =>
-    (a||'').toLowerCase().replace(/[^a-z0-9]/g,'')));
-  const nrm = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-
-  // Note par adresse pour affichage inline
-  const noteParAdr = {};
+  const nrm = s => (s||'').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const secondaires = new Set(adressesSecondaires(secteur).map(nrm));
+  const inhab       = new Set((secteur.inhabitees||[]).map(nrm));
+  const noteParAdr  = {};
   notes.forEach(n => { noteParAdr[nrm(n.adresse)] = n.texte; });
 
-  let totalFoyers = 0;
+  let totalFoyers = 0, dejaFaits = 0;
   const blocs = rues.map(r => {
     let nums = [];
     try { nums = numerosDeRue(secteur.commune, r.rue, r.restriction); } catch(e) {}
     const comp = lireComplements(secteur, r.rue);
-    nums = [...new Set([...nums, ...comp])].sort((a,b) =>
-      (parseInt(a)||9999) - (parseInt(b)||9999));
-    nums = nums.filter(n => !secondaires.has(nrm(`${n} ${r.rue}`)));
-    totalFoyers += nums.filter(n => !inhab.has(nrm(`${n} ${r.rue}`))).length;
-    return { rue: r.rue, nums };
+    nums = [...new Set([...nums, ...comp])]
+      .filter(n => !secondaires.has(nrm(`${n} ${r.rue}`)))
+      .sort((a,b) => (parseInt(a)||9999) - (parseInt(b)||9999));
+    nums.forEach(n => {
+      const c = nrm(`${n} ${r.rue}`);
+      if (!inhab.has(c)) totalFoyers++;
+      if (passages.some(p => nrm(p.adresse) === c)) dejaFaits++;
+    });
+    return { rue: r.rue, nums, partagee: Array.isArray(r.restriction) };
   }).filter(b => b.nums.length > 0);
+
+  const COLS = 14;
+  const dateJour = new Date().toLocaleDateString('fr-FR',
+    { day:'numeric', month:'long', year:'numeric' });
 
   const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <title>Fiche de route — ${secteur.nom}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  @page { size: A4 portrait; margin: 12mm 10mm; }
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 10pt;
-         color: #1a1a1a; margin: 0; }
-  header { border-bottom: 2.5pt solid #CC1D1D; padding-bottom: 5pt; margin-bottom: 9pt; }
-  h1 { font-size: 16pt; margin: 0; color: #CC1D1D; }
-  .meta { font-size: 8.5pt; color: #555; margin-top: 2pt; }
-  .synth { display: flex; gap: 10pt; margin: 8pt 0 10pt; font-size: 8.5pt; }
-  .synth div { border: 0.7pt solid #ccc; border-radius: 3pt; padding: 3pt 7pt; }
-  .synth strong { font-size: 11pt; display: block; }
-  .rue { margin-bottom: 7pt; page-break-inside: avoid; }
-  .rue-nom { font-weight: 700; font-size: 10.5pt; background: #f1f2f6;
-             padding: 2.5pt 5pt; border-left: 2.5pt solid #2D3142; }
-  table.nums { width: 100%; border-collapse: collapse; margin-top: 2pt; }
-  table.nums td { border: 0.5pt solid #d5d5d5; padding: 3pt 2pt; text-align: center;
-                  font-size: 8.5pt; width: 6.25%; height: 22pt; vertical-align: top; }
-  .num { font-weight: 700; display: block; font-size: 9pt; }
-  .num-inhab { color: #999; text-decoration: line-through; }
-  .num-note { color: #B45309; font-size: 7pt; }
-  .num-fait { background: #f0f0f0; }
-  .legende { margin-top: 10pt; padding-top: 5pt; border-top: 0.7pt solid #ccc;
-             font-size: 8pt; color: #555; }
-  .notes { margin-top: 8pt; font-size: 8.5pt; page-break-inside: avoid; }
-  .notes h2 { font-size: 10pt; margin: 0 0 3pt; }
-  .notes li { margin-bottom: 1.5pt; }
-  .bilan { margin-top: 12pt; border: 0.7pt solid #999; border-radius: 3pt;
-           padding: 6pt; page-break-inside: avoid; }
-  .bilan h2 { font-size: 10pt; margin: 0 0 5pt; }
-  .bilan-grid { display: flex; gap: 8pt; }
-  .bilan-grid div { flex: 1; font-size: 8.5pt; }
-  .ligne { border-bottom: 0.5pt solid #999; height: 15pt; margin-top: 3pt; }
-  @media print { .noprint { display: none; } }
-</style></head><body>
-<header>
-  <h1>${secteur.nom}</h1>
-  <div class="meta">${secteur.commune} · Amicale des Sapeurs-Pompiers de Pacy-sur-Eure
-    ${secteur.equipNom ? ` · Équipe : ${secteur.equipNom}` : ''}</div>
-</header>
+  @page { size:A4 portrait; margin:11mm 9mm 9mm; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;font-size:9.4pt;
+       color:#22262e;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
-<div class="synth">
-  <div><strong>${totalFoyers}</strong>boîtes à visiter</div>
-  <div><strong>${blocs.length}</strong>rue${blocs.length>1?'s':''}</div>
-  <div><strong>${Math.round(totalFoyers*0.35)}</strong>calendriers visés</div>
+  /* En-tête */
+  .head{display:flex;align-items:center;gap:9pt;padding-bottom:7pt;
+        border-bottom:2pt solid #CC1D1D;margin-bottom:9pt}
+  .head img{width:38pt;height:38pt;object-fit:contain;border-radius:50%;flex-shrink:0}
+  .head-txt{flex:1}
+  .head h1{font-size:17pt;font-weight:800;color:#CC1D1D;letter-spacing:-.3pt;line-height:1.1}
+  .head .commune{font-size:10pt;font-weight:600;color:#4A4E6A;margin-top:1pt}
+  .head .amicale{font-size:7.6pt;color:#8b8f9c;margin-top:2pt;letter-spacing:.2pt;
+                 text-transform:uppercase}
+  .head-eq{text-align:right;font-size:8pt;color:#4A4E6A;flex-shrink:0}
+  .head-eq strong{display:block;font-size:9.5pt;color:#22262e}
+
+  /* Bandeau de synthèse */
+  .kpis{display:flex;gap:6pt;margin-bottom:10pt}
+  .kpi{flex:1;text-align:center;padding:5pt 3pt;border-radius:4pt;
+       background:#f6f7fa;border:.6pt solid #e3e5ec}
+  .kpi b{display:block;font-size:14pt;font-weight:800;line-height:1;color:#22262e}
+  .kpi span{display:block;font-size:6.8pt;color:#8b8f9c;margin-top:2.5pt;
+            text-transform:uppercase;letter-spacing:.3pt}
+  .kpi--rouge{background:#fdecea;border-color:#f5b8b2}
+  .kpi--rouge b{color:#CC1D1D}
+
+  /* Rues */
+  .rue{margin-bottom:7.5pt;page-break-inside:avoid}
+  .rue-head{display:flex;align-items:baseline;gap:5pt;padding:3pt 6pt;
+            background:#2D3142;color:#fff;border-radius:3pt 3pt 0 0}
+  .rue-head h2{font-size:9.8pt;font-weight:700;flex:1;letter-spacing:-.1pt}
+  .rue-head .cnt{font-size:7.4pt;opacity:.75;font-weight:500}
+  .rue-head .tag{font-size:6.4pt;background:rgba(255,255,255,.22);
+                 padding:1pt 4pt;border-radius:6pt;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(${COLS},1fr);
+        border:.6pt solid #d8dae2;border-top:none;border-radius:0 0 3pt 3pt;overflow:hidden}
+  .cel{border-right:.5pt solid #e3e5ec;border-bottom:.5pt solid #e3e5ec;
+       min-height:26pt;padding:2.5pt 1pt 1pt;text-align:center;position:relative}
+  .cel:nth-child(${COLS}n){border-right:none}
+  .cel .n{font-size:9pt;font-weight:700;display:block;line-height:1}
+  .cel .nt{font-size:5.6pt;color:#B45309;display:block;line-height:1.15;
+           margin-top:1pt;font-weight:600}
+  .cel--fait{background:#eef0f4}
+  .cel--fait .n{color:#9aa0ad}
+  .cel--fait::after{content:'✓';position:absolute;top:1pt;right:2pt;
+                    font-size:6pt;color:#16A34A;font-weight:800}
+  .cel--inhab{background:repeating-linear-gradient(45deg,#f6f7fa,#f6f7fa 3pt,#eaecf1 3pt,#eaecf1 6pt)}
+  .cel--inhab .n{color:#b4b8c2;text-decoration:line-through}
+  .cel--vide{background:#fbfbfc;border-right:none;border-bottom:none}
+
+  /* Bas de page */
+  .row{display:flex;gap:8pt;margin-top:9pt;page-break-inside:avoid}
+  .card{flex:1;border:.6pt solid #d8dae2;border-radius:4pt;padding:6pt 7pt}
+  .card h3{font-size:8.6pt;font-weight:700;margin-bottom:4pt;color:#2D3142;
+           letter-spacing:.1pt;text-transform:uppercase}
+  .lg{display:flex;flex-wrap:wrap;gap:4pt 9pt;font-size:7.6pt;color:#5a5f6b}
+  .lg i{display:inline-block;width:11pt;height:11pt;border-radius:2pt;
+        border:.6pt solid #c4c8d1;text-align:center;line-height:10pt;
+        font-size:6.6pt;font-weight:800;font-style:normal;margin-right:2.5pt;
+        color:#22262e;background:#fff}
+  .notes-l{font-size:7.8pt;line-height:1.5}
+  .notes-l div{padding:1.5pt 0;border-bottom:.4pt dotted #dfe1e8}
+  .notes-l div:last-child{border:none}
+  .notes-l b{color:#22262e}
+  .notes-l span{color:#B45309}
+
+  .bilan{margin-top:9pt;border:.8pt solid #2D3142;border-radius:4pt;overflow:hidden;
+         page-break-inside:avoid}
+  .bilan h3{font-size:8.6pt;font-weight:700;background:#2D3142;color:#fff;
+            padding:3.5pt 7pt;letter-spacing:.2pt;text-transform:uppercase}
+  .bilan-in{padding:7pt}
+  .champs{display:flex;gap:9pt}
+  .champs+.champs{margin-top:8pt}
+  .ch{flex:1}
+  .ch label{font-size:7pt;color:#8b8f9c;text-transform:uppercase;letter-spacing:.3pt;
+            font-weight:600}
+  .ch .ln{border-bottom:.7pt solid #9aa0ad;height:16pt;margin-top:1pt}
+  .ch--tot .ln{border-bottom-width:1.4pt;border-color:#CC1D1D}
+  .ch--tot label{color:#CC1D1D;font-weight:700}
+
+  .foot{margin-top:7pt;display:flex;justify-content:space-between;
+        font-size:6.8pt;color:#b4b8c2;letter-spacing:.2pt}
+  @media print{.noprint{display:none!important}}
+  .noprint{margin-top:14pt;text-align:center}
+  .noprint button{font-family:'Inter',sans-serif;padding:9pt 22pt;font-size:10.5pt;
+    font-weight:700;background:#CC1D1D;color:#fff;border:none;border-radius:6pt;cursor:pointer}
+</style></head><body>
+
+<div class="head">
+  <img src="${LOGO_SP}" alt="">
+  <div class="head-txt">
+    <h1>${secteur.nom}</h1>
+    <div class="commune">${secteur.commune}</div>
+    <div class="amicale">Amicale des Sapeurs-Pompiers de Pacy-sur-Eure</div>
+  </div>
+  <div class="head-eq">
+    ${secteur.equipNom ? `<strong>${secteur.equipNom}</strong>` : ''}
+    Éditée le ${dateJour}
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi kpi--rouge"><b>${totalFoyers}</b><span>boîtes à visiter</span></div>
+  <div class="kpi"><b>${blocs.length}</b><span>rue${blocs.length>1?'s':''}</span></div>
+  <div class="kpi"><b>${Math.round(totalFoyers*0.35)}</b><span>calendriers visés</span></div>
+  ${dejaFaits ? `<div class="kpi"><b>${dejaFaits}</b><span>déjà saisis</span></div>` : ''}
 </div>
 
 ${blocs.map(b => {
-  const cellules = b.nums.map(n => {
-    const cle = nrm(`${n} ${b.rue}`);
-    const p = passages.find(x => nrm(x.adresse) === cle);
-    const inh = inhab.has(cle);
-    const nt = noteParAdr[cle];
-    return `<td class="${p ? 'num-fait' : ''}">
-      <span class="num ${inh ? 'num-inhab' : ''}">${n}</span>
-      ${nt ? `<span class="num-note">${nt.slice(0,14)}</span>` : ''}
-    </td>`;
+  const cels = b.nums.map(n => {
+    const c   = nrm(`${n} ${b.rue}`);
+    const fait= passages.some(p => nrm(p.adresse) === c);
+    const inh = inhab.has(c);
+    const nt  = noteParAdr[c];
+    return `<div class="cel${fait?' cel--fait':''}${inh?' cel--inhab':''}">
+      <span class="n">${n}</span>${nt?`<span class="nt">${nt.slice(0,13)}</span>`:''}
+    </div>`;
   });
-  const lignes = [];
-  for (let i = 0; i < cellules.length; i += 16) {
-    lignes.push(`<tr>${cellules.slice(i, i+16).join('')}${
-      '<td style="border:none"></td>'.repeat(Math.max(0, 16 - cellules.slice(i, i+16).length))}</tr>`);
-  }
+  const reste = (COLS - (cels.length % COLS)) % COLS;
   return `<div class="rue">
-    <div class="rue-nom">${b.rue} <span style="font-weight:400;font-size:8.5pt">(${b.nums.length})</span></div>
-    <table class="nums">${lignes.join('')}</table>
+    <div class="rue-head">
+      <h2>${b.rue}</h2>
+      ${b.partagee?'<span class="tag">portion</span>':''}
+      <span class="cnt">${b.nums.length} boîte${b.nums.length>1?'s':''}</span>
+    </div>
+    <div class="grid">${cels.join('')}${'<div class="cel cel--vide"></div>'.repeat(reste)}</div>
   </div>`;
 }).join('')}
 
-<div class="legende">
-  Coche ou annote chaque numéro : <strong>D</strong> don · <strong>O</strong> offert ·
-  <strong>R</strong> refus · <strong>A</strong> absent. Les cases grisées sont déjà saisies dans l'application.
-  Les numéros barrés sont des logements inhabités.
+<div class="row">
+  <div class="card">
+    <h3>Codes à noter</h3>
+    <div class="lg">
+      <span><i>D</i>Don</span><span><i>O</i>Offert</span>
+      <span><i>R</i>Refus</span><span><i>A</i>Absent</span>
+      <span><i style="background:#eef0f4">✓</i>Déjà saisi</span>
+      <span><i style="text-decoration:line-through;color:#b4b8c2">12</i>Inhabité</span>
+    </div>
+  </div>
+  ${notes.length ? `<div class="card">
+    <h3>📌 Notes du secteur</h3>
+    <div class="notes-l">
+      ${notes.slice(0,8).map(n=>`<div><b>${n.adresse}</b> — <span>${n.texte}</span></div>`).join('')}
+      ${notes.length>8?`<div style="color:#b4b8c2">… et ${notes.length-8} autre${notes.length-8>1?'s':''}</div>`:''}
+    </div>
+  </div>` : ''}
 </div>
-
-${notes.length ? `<div class="notes">
-  <h2>📌 Notes sur le secteur</h2>
-  <ul>${notes.map(n => `<li><strong>${n.adresse}</strong> — ${n.texte}</li>`).join('')}</ul>
-</div>` : ''}
 
 <div class="bilan">
-  <h2>Bilan de la sortie</h2>
-  <div class="bilan-grid">
-    <div>Date<div class="ligne"></div></div>
-    <div>Nom<div class="ligne"></div></div>
-    <div>Calendriers placés<div class="ligne"></div></div>
-  </div>
-  <div class="bilan-grid" style="margin-top:5pt">
-    <div>Espèces<div class="ligne"></div></div>
-    <div>Chèques<div class="ligne"></div></div>
-    <div>Total remis<div class="ligne"></div></div>
+  <h3>Bilan de la sortie</h3>
+  <div class="bilan-in">
+    <div class="champs">
+      <div class="ch"><label>Date</label><div class="ln"></div></div>
+      <div class="ch"><label>Nom de l'équipier</label><div class="ln"></div></div>
+      <div class="ch"><label>Calendriers placés</label><div class="ln"></div></div>
+    </div>
+    <div class="champs">
+      <div class="ch"><label>Espèces</label><div class="ln"></div></div>
+      <div class="ch"><label>Chèques</label><div class="ln"></div></div>
+      <div class="ch ch--tot"><label>Total remis</label><div class="ln"></div></div>
+    </div>
   </div>
 </div>
 
-<div class="noprint" style="margin-top:14pt;text-align:center">
-  <button onclick="window.print()" style="padding:8pt 18pt;font-size:11pt;cursor:pointer">
-    🖨️ Imprimer</button>
+<div class="foot">
+  <span>SDIS 27 · Amicale de Pacy-sur-Eure</span>
+  <span>${secteur.nom} — ${secteur.commune}</span>
 </div>
+
+<div class="noprint"><button onclick="window.print()">🖨️ Imprimer cette fiche</button></div>
 </body></html>`;
 
   const w = window.open('', '_blank');
