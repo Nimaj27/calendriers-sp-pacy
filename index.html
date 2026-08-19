@@ -1271,7 +1271,8 @@ import {
   enableNetwork, disableNetwork, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import {
-  getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged
+  getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged,
+  signInAnonymously
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
 const app  = initializeApp(FIREBASE_CONFIG);
@@ -1295,7 +1296,8 @@ const COLLECTIONS = {
   EQUIPES:  "equipes",
   SECTEURS: "secteurs",
   PASSAGES: "passages",
-  ADMINS:   "admins"
+  ADMINS:   "admins",
+  PINS:     "pins"      // { pin } → { equipeId } : le code est l'identifiant du document
 };
 
 const fsCollection = (name)          => collection(db, name);
@@ -1317,6 +1319,26 @@ const fsListen     = (col, cb, ...constraints) => {
 const fsListenDoc  = (col, id, cb) =>
   onSnapshot(doc(db, col, id), snap => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null));
 
+// ── Session technique ────────────────────────────────────────
+// Les règles Firestore exigent une session. Les équipiers (code PIN) n'ont
+// pas de compte : on leur ouvre une session anonyme Firebase, ce qui permet
+// aux règles de refuser tout accès direct à l'API hors de l'application.
+let _sessionEnCours = null;
+async function assurerSession() {
+  if (auth.currentUser) return auth.currentUser;
+  if (_sessionEnCours) return _sessionEnCours;
+  _sessionEnCours = signInAnonymously(auth)
+    .then(r => { _sessionEnCours = null; return r.user; })
+    .catch(e => {
+      _sessionEnCours = null;
+      console.error("Session anonyme refusée :", e?.code || e);
+      throw e;
+    });
+  return _sessionEnCours;
+}
+
+const estAnonyme = () => !!auth.currentUser?.isAnonymous;
+
 const loginGoogle      = () => signInWithPopup(auth, googleProvider);
 const getLoginRedirect = () => Promise.resolve(null);
 const logoutGoogle     = () => signOut(auth);
@@ -1328,10 +1350,19 @@ async function isAdmin(email) {
   return snap.exists();
 }
 
+// Connexion par code PIN.
+// Le PIN sert d'identifiant de document dans /pins : il faut donc connaître
+// le code exact pour obtenir la moindre information. La collection n'est pas
+// énumérable (règle "list" réservée aux administrateurs).
 async function loginPin(pin) {
-  const equipes = await fsQuery(COLLECTIONS.EQUIPES, where("pin", "==", pin));
-  if (equipes.length === 0) return null;
-  return equipes[0];
+  const ref = await fsGet(COLLECTIONS.PINS, String(pin));
+  if (!ref || !ref.equipeId) {
+    // Repli sur l'ancien stockage, le temps que la migration soit faite
+    const legacy = await fsQuery(COLLECTIONS.EQUIPES, where("pin", "==", pin));
+    return legacy.length ? legacy[0] : null;
+  }
+  const equipe = await fsGet(COLLECTIONS.EQUIPES, ref.equipeId);
+  return equipe || null;
 }
 
 const _networkListeners = [];
@@ -1587,19 +1618,56 @@ const MODE_PAIEMENT = { ESPECES:"especes", CHEQUE:"cheque", CARTE:"carte" };
 async function creerEquipe({ nom, membres=[], pin }) {
   if (!nom) throw new Error("Nom d'équipe obligatoire");
   if (!pin || !/^\d{4}$/.test(pin)) throw new Error("PIN doit être 4 chiffres");
-  const existants = await fsQuery(COLLECTIONS.EQUIPES, where("pin","==",pin));
-  if (existants.length > 0) throw new Error("Ce PIN est déjà utilisé");
-  return fsAdd(COLLECTIONS.EQUIPES, { nom, membres, pin, actif:true });
+  // L'unicité est structurelle : le PIN est l'identifiant du document
+  const pris = await fsGet(COLLECTIONS.PINS, pin);
+  if (pris) throw new Error("Ce PIN est déjà utilisé");
+  const ref = await fsAdd(COLLECTIONS.EQUIPES, { nom, membres, actif:true });
+  await fsSet(COLLECTIONS.PINS, pin, { equipeId: ref.id, nom });
+  return ref;
 }
 async function mettreAJourEquipe(equipeId, data) {
-  if (data.pin && !/^\d{4}$/.test(data.pin)) throw new Error("PIN doit être 4 chiffres");
-  if (data.pin) {
-    const existants = await fsQuery(COLLECTIONS.EQUIPES, where("pin","==",data.pin));
-    if (existants.some(e=>e.id!==equipeId)) throw new Error("Ce PIN est déjà utilisé");
+  const { pin, ...champs } = data;
+  if (pin !== undefined && pin !== null && pin !== '') {
+    if (!/^\d{4}$/.test(pin)) throw new Error("PIN doit être 4 chiffres");
+    const pris = await fsGet(COLLECTIONS.PINS, pin);
+    if (pris && pris.equipeId !== equipeId) throw new Error("Ce PIN est déjà utilisé");
+    // Retirer l'ancien code de cette équipe
+    const tous = await fsGetAll(COLLECTIONS.PINS);
+    for (const p of tous) {
+      if (p.equipeId === equipeId && p.id !== pin) await fsDelete(COLLECTIONS.PINS, p.id);
+    }
+    await fsSet(COLLECTIONS.PINS, pin, { equipeId, nom: champs.nom || pris?.nom || '' });
   }
-  return fsUpdate(COLLECTIONS.EQUIPES, equipeId, data);
+  if (Object.keys(champs).length) await fsUpdate(COLLECTIONS.EQUIPES, equipeId, champs);
 }
-async function supprimerEquipe(id) { return fsDelete(COLLECTIONS.EQUIPES, id); }
+async function supprimerEquipe(id) {
+  const tous = await fsGetAll(COLLECTIONS.PINS);
+  for (const p of tous) if (p.equipeId === id) await fsDelete(COLLECTIONS.PINS, p.id);
+  return fsDelete(COLLECTIONS.EQUIPES, id);
+}
+
+// Table { equipeId → pin } — réservée aux administrateurs (règle "list")
+async function lirePins() {
+  const tous = await fsGetAll(COLLECTIONS.PINS);
+  const map = {};
+  for (const p of tous) map[p.equipeId] = p.id;
+  return map;
+}
+
+// Migration : déplace les PIN encore stockés dans /equipes vers /pins
+async function migrerPins() {
+  const equipes = await fsGetAll(COLLECTIONS.EQUIPES);
+  let deplaces = 0, conflits = 0;
+  for (const e of equipes) {
+    if (!e.pin) continue;
+    const pris = await fsGet(COLLECTIONS.PINS, String(e.pin));
+    if (pris && pris.equipeId !== e.id) { conflits++; continue; }
+    await fsSet(COLLECTIONS.PINS, String(e.pin), { equipeId: e.id, nom: e.nom || '' });
+    await fsUpdate(COLLECTIONS.EQUIPES, e.id, { pin: null });
+    deplaces++;
+  }
+  return { deplaces, conflits, total: equipes.length };
+}
 async function lireEquipes() { return fsGetAll(COLLECTIONS.EQUIPES); }
 async function lireEquipe(id) { return fsGet(COLLECTIONS.EQUIPES, id); }
 function ecouterEquipes(callback) {
@@ -2967,46 +3035,56 @@ getLoginRedirect().then(async (result) => {
 });
 
 onAuth(async (user) => {
-  console.log("onAuth fired, user:", user?.email || "null");
-
-  // Vérifier session PIN Amicaliste en premier (indépendant de Google Auth)
-  const sessionEquipe = sessionStorage.getItem("equipe");
-  if (sessionEquipe && !user) {
-    const eq = JSON.parse(sessionEquipe);
-    APP.role = "equipier";
-    APP.user = eq;
-    APP.equipeId  = eq.id;
-    APP.equipeNom = eq.nom;
-    APP.membre    = sessionStorage.getItem("membre") || null;
-    naviguer("#terrain");
-    return;
-  }
-
-  if (user) {
-    console.log("Checking admin for:", user.email);
+  // ── Aucune session : en ouvrir une (anonyme) puis attendre le rappel ──
+  if (!user) {
     try {
-      const admin = await isAdmin(user.email);
-      console.log("isAdmin result:", admin);
-      if (admin) {
-        APP.role = "admin";
-        APP.user = user;
-        demarrerPlanificateurResume();
-        const hash = window.location.hash;
-        naviguer(ROUTES[hash] && hash !== "#login" ? hash : "#dashboard");
-        return;
-      }
-      // Pas admin → toast + déconnexion
-      toast("Accès refusé. Vérifie que ton email est dans la collection admins Firestore.", "error");
-      console.error("Email non admin:", user.email);
-      await logoutGoogle();
+      await assurerSession();
+      return;   // onAuth sera rappelé avec la session anonyme
     } catch(e) {
-      console.error("Erreur isAdmin:", e);
-      toast("Erreur de vérification admin : " + e.message, "error");
-      await logoutGoogle();
+      toast("Impossible d'ouvrir une session. Vérifie ta connexion.", "error");
+      naviguer("#login");
+      return;
     }
   }
 
-  naviguer("#login");
+  // ── Session anonyme : c'est un équipier (ou un visiteur sur l'écran de connexion) ──
+  if (user.isAnonymous) {
+    const sessionEquipe = sessionStorage.getItem("equipe");
+    if (sessionEquipe) {
+      try {
+        const eq = JSON.parse(sessionEquipe);
+        APP.role = "equipier";
+        APP.user = eq;
+        APP.equipeId  = eq.id;
+        APP.equipeNom = eq.nom;
+        APP.membre    = sessionStorage.getItem("membre") || null;
+        naviguer("#terrain");
+        return;
+      } catch(e) { sessionStorage.removeItem("equipe"); }
+    }
+    naviguer("#login");
+    return;
+  }
+
+  // ── Session Google : vérifier les droits d'administration ──
+  try {
+    const admin = await isAdmin(user.email);
+    if (admin) {
+      APP.role = "admin";
+      APP.user = user;
+      demarrerPlanificateurResume();
+      const hash = window.location.hash;
+      naviguer(ROUTES[hash] && hash !== "#login" ? hash : "#dashboard");
+      return;
+    }
+    toast("Accès refusé : " + user.email + " n'est pas administrateur.", "error");
+    await logoutGoogle();
+    await assurerSession();   // repasser en session anonyme pour l'accès équipier
+  } catch(e) {
+    toast("Erreur de vérification : " + e.message, "error");
+    await logoutGoogle();
+    await assurerSession();
+  }
 });
 
 // ════════════════════════════════════════════════════════════
@@ -3284,6 +3362,7 @@ function bindLogout() {
     sessionStorage.removeItem("equipe");
     sessionStorage.removeItem("membre");
     APP.role = null; APP.user = null; APP.equipeId = null; APP.equipeNom = null; APP.membre = null;
+    try { await assurerSession(); } catch(e) {}   // garder une session pour l'accès PIN
     naviguer("#login");
   });
   bindMobileMenu();
@@ -4097,7 +4176,12 @@ async function renderEquipes() {
     e.target.value = '';
   });
 
-  const unsub = ecouterEquipes(renderEquipesList);
+  const unsub = ecouterEquipes(async (equipes) => {
+    // Les PIN vivent dans une collection séparée : on les rattache pour l'affichage
+    let pins = {};
+    try { pins = await lirePins(); } catch(e) {}
+    renderEquipesList(equipes.map(e => ({ ...e, pin: pins[e.id] || e.pin || null })));
+  });
   APP.unsubs.push(unsub);
 }
 
@@ -4119,7 +4203,8 @@ function renderEquipesList(equipes) {
             return `
             <tr>
               <td><strong>${e.nom}</strong></td>
-              <td><code class="pin-code">${e.pin}</code></td>
+              <td>${e.pin ? `<code class="pin-code">${e.pin}</code>`
+                : '<span style="color:var(--orange);font-size:.75rem">à migrer</span>'}</td>
               <td>${(e.membres || []).join(', ') || '—'}</td>
               <td>${remis > 0
                 ? `<button class="btn-remis" onclick="voirRemises('${e.id}')">${formatMontant(remis)}<small>${nbR} remise${nbR>1?'s':''}</small></button>`
@@ -4880,6 +4965,25 @@ async function renderConfig() {
       <button id="btn-save-config" class="btn btn--primary">💾 Enregistrer</button>
     </div>
 
+    <div class="form-card" style="margin-top:24px;">
+      <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:8px;">🔐 Sécurité des codes PIN</h2>
+      <p style="font-size:.85rem;color:var(--ardoise-mid);margin-bottom:16px;line-height:1.5;">
+        Déplace les codes PIN vers un stockage où il faut connaître un code pour le lire.
+        À lancer une seule fois. Les codes restent identiques, rien ne change pour les équipiers.
+      </p>
+      <div id="migration-etat" class="notif-etat"></div>
+      <button id="btn-migrer-pins" class="btn btn--primary">🔐 Sécuriser les codes PIN</button>
+    </div>
+
+    <div class="form-card" style="margin-top:24px;">
+      <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:8px;">🛟 Sauvegarde</h2>
+      <p style="font-size:.85rem;color:var(--ardoise-mid);margin-bottom:16px;line-height:1.5;">
+        Télécharge l'intégralité des données (secteurs, équipes, passages, historique)
+        dans un fichier JSON. À conserver hors de l'application, par précaution.
+      </p>
+      <button id="btn-sauvegarde" class="btn btn--primary">⬇️ Télécharger la sauvegarde</button>
+    </div>
+
     ${FEATURE_NOTIFS_RESUME ? `
     <div class="form-card" style="margin-top:24px;">
       <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:8px;">🔔 Résumé quotidien</h2>
@@ -4965,6 +5069,83 @@ async function renderConfig() {
   });
   } // fin FEATURE_NOTIFS_RESUME
 
+  // État de la migration des PIN
+  (async () => {
+    const el = document.getElementById("migration-etat");
+    if (!el) return;
+    try {
+      const [equipes, pins] = await Promise.all([lireEquipes(), lirePins()]);
+      const restants = equipes.filter(e => e.pin).length;
+      const migres = Object.keys(pins).length;
+      if (restants === 0 && migres > 0) {
+        el.className = "notif-etat notif-etat--on";
+        el.textContent = `✅ ${migres} code(s) déjà sécurisé(s).`;
+        const b = document.getElementById("btn-migrer-pins");
+        if (b) b.style.display = "none";
+      } else {
+        el.className = "notif-etat notif-etat--pending";
+        el.textContent = `${restants} code(s) encore stocké(s) en clair dans les équipes.`;
+      }
+    } catch(e) {
+      el.className = "notif-etat notif-etat--off";
+      el.textContent = "Impossible de vérifier l'état : " + e.message;
+    }
+  })();
+
+  document.getElementById("btn-migrer-pins")?.addEventListener("click", async () => {
+    if (!confirm("Déplacer les codes PIN vers le stockage sécurisé ?\n\n" +
+                 "Les codes restent les mêmes, les équipiers ne verront aucun changement.\n" +
+                 "Pense à avoir téléchargé une sauvegarde avant.")) return;
+    const btn = document.getElementById("btn-migrer-pins");
+    setLoading(btn, true);
+    try {
+      const r = await migrerPins();
+      toast(`${r.deplaces} code(s) sécurisé(s)${r.conflits ? ` · ${r.conflits} conflit(s)` : ''}`,
+            r.conflits ? "error" : "success");
+      naviguer("#config");
+    } catch(e) {
+      toast("Erreur : " + e.message, "error");
+      setLoading(btn, false);
+    }
+  });
+
+  document.getElementById("btn-sauvegarde")?.addEventListener("click", async () => {
+    const btn = document.getElementById("btn-sauvegarde");
+    setLoading(btn, true);
+    try {
+      const [secteurs, equipes, passages, saisons, cfg] = await Promise.all([
+        fsGetAll(COLLECTIONS.SECTEURS),
+        fsGetAll(COLLECTIONS.EQUIPES),
+        fsGetAll(COLLECTIONS.PASSAGES),
+        fsGetAll("historique_saisons"),
+        lireConfig()
+      ]);
+      let pins = {};
+      try { pins = await lirePins(); } catch(e) {}
+      const dump = {
+        genere: new Date().toISOString(),
+        version: 1,
+        parQui: APP.user?.email || '',
+        config: cfg || {},
+        secteurs,
+        equipes: equipes.map(e => ({ ...e, pin: pins[e.id] || e.pin || null })),
+        passages,
+        historique_saisons: saisons
+      };
+      const blob = new Blob([JSON.stringify(dump, null, 1)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sauvegarde-calendriers-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast(`Sauvegarde : ${secteurs.length} secteurs · ${equipes.length} équipes · ${passages.length} passages`, "success");
+    } catch(e) {
+      toast("Erreur : " + e.message, "error");
+    }
+    setLoading(btn, false);
+  });
+
   document.getElementById("btn-save-config")?.addEventListener("click", async () => {
     const admins = document.getElementById("cfg-admins").value.split('\n').map(e => e.trim()).filter(Boolean);
     try {
@@ -5014,9 +5195,11 @@ async function renderTerrain() {
   document.getElementById("btn-mon-bilan")?.addEventListener("click", () => afficherMonBilan());
 
   document.getElementById("btn-logout-terrain")?.addEventListener("click", () => {
+    stopUnsubs();
     sessionStorage.removeItem("equipe");
     sessionStorage.removeItem("membre");
     APP.role = null; APP.user = null; APP.equipeId = null; APP.equipeNom = null; APP.membre = null;
+    APP._rueActive = null;
     naviguer("#login");
   });
 
