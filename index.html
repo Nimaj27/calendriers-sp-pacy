@@ -1220,6 +1220,29 @@ body {
 .vr-ok  { background: var(--vert-light) !important; color: #14532D; }
 .mr-part { font-size:.66rem; font-style:normal; font-weight:600; color:var(--bleu);
   background:var(--bleu-light); padding:1px 5px; border-radius:99px; }
+
+/* ── Détection GPS du secteur ───────────────────────────────── */
+.btn-detect {
+  width: calc(100% - 32px); margin: 0 var(--sp-4) var(--sp-3);
+  padding: var(--sp-3);
+  background: linear-gradient(135deg, #1D4ED8 0%, #1E3A8A 100%);
+  color: var(--blanc); border: none; border-radius: var(--r-md);
+  cursor: pointer; font-family: var(--font);
+  font-size: .9rem; font-weight: 700;
+}
+.btn-detect:active { transform: scale(.98); }
+.detect-resultat {
+  margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md); border: 1.5px solid var(--gris-bord);
+  background: var(--blanc); font-size: .85rem;
+}
+.detect-resultat--loading { text-align: center; color: var(--ardoise-mid); font-style: italic; }
+.detect-resultat--ok    { border-color: var(--vert); background: var(--vert-light); }
+.detect-resultat--multi { border-color: var(--bleu); background: var(--bleu-light); }
+.detect-resultat--vide  { color: var(--ardoise-mid); text-align: center; }
+.detect-resultat--erreur{ border-color: var(--rouge); background: var(--rouge-light); color: var(--rouge-dark); }
+.dr-titre { font-weight: 700; margin-bottom: 2px; }
+.dr-sous  { font-size: .76rem; color: var(--ardoise-mid); margin-bottom: var(--sp-2); }
 </style>
 </head>
 <body>
@@ -1935,6 +1958,61 @@ async function afficherSecteurUnique(map, secteur) {
   layer.addTo(map);
   const bounds=layer.getBounds(); if(bounds.isValid()) map.fitBounds(bounds,{padding:[30,30]});
   return layer;
+}
+
+// ── Détection du secteur contenant un point GPS ──────────────────
+// Utilise les polygones précalculés (test point-dans-polygone, sans dépendance)
+function pointDansPolygone(lon, lat, ring) {
+  let dedans = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if (((yi > lat) !== (yj > lat)) &&
+        (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) dedans = !dedans;
+  }
+  return dedans;
+}
+
+function dansGeometrie(lon, lat, geom) {
+  if (!geom) return false;
+  const polys = geom.type === 'Polygon' ? [geom.coordinates]
+              : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+  for (const poly of polys) {
+    // poly[0] = contour extérieur, poly[1..] = trous
+    if (pointDansPolygone(lon, lat, poly[0])) {
+      let dansTrou = false;
+      for (let k = 1; k < poly.length; k++) {
+        if (pointDansPolygone(lon, lat, poly[k])) { dansTrou = true; break; }
+      }
+      if (!dansTrou) return true;
+    }
+  }
+  return false;
+}
+
+// Cherche parmi une liste de secteurs celui qui contient la position
+// Retourne { secteur, methode } — methode = 'polygone' | 'commune' | null
+async function secteurALaPosition(lat, lon, secteurs) {
+  // 1. Polygones précalculés (Pacy, Ménilles, Saint-Aquilin) — instantané
+  for (const s of secteurs) {
+    const geom = POLYGONES_SECTEURS[s.nom];
+    if (geom && dansGeometrie(lon, lat, geom)) {
+      return { secteur: s, methode: 'polygone' };
+    }
+  }
+  // 2. Contours communaux pour les autres secteurs
+  const communes = [...new Set(secteurs.map(s => s.commune))];
+  for (const commune of communes) {
+    const code = COMMUNES_INSEE[commune];
+    if (!code) continue;
+    const gj = await fetchContourCommune(code);
+    if (gj && dansGeometrie(lon, lat, gj.geometry || gj)) {
+      // Si plusieurs secteurs partagent cette commune, on ne peut pas trancher
+      const candidats = secteurs.filter(s => s.commune === commune);
+      if (candidats.length === 1) return { secteur: candidats[0], methode: 'commune' };
+      return { secteur: null, methode: 'commune', candidats };
+    }
+  }
+  return { secteur: null, methode: null };
 }
 
 // historique.js — Historique multi-années
@@ -3576,6 +3654,7 @@ function renderSecteursList(secteurs) {
             ${s.rues?.length ? `<div class="secteur-rues">${s.rues.join(', ')}</div>` : ''}
           </div>
           <div class="secteur-card-actions">
+            <button class="btn btn--sm btn--ghost" onclick="ficheDeRoute('${s.id}')" title="Fiche de route imprimable">🖨️</button>
             <button class="btn btn--sm btn--ghost" onclick="editSecteur('${s.id}')">✏️ Modifier</button>
             <button class="btn btn--sm btn--ghost" onclick="affecterSecteur('${s.id}')">👥 Affecter</button>
             ${s.statut !== 'termine' ? `<button class="btn btn--sm btn--ghost" onclick="clotureSecteur('${s.id}')">✅ Clôturer</button>` : ''}
@@ -3586,6 +3665,147 @@ function renderSecteursList(secteurs) {
     </div>
   `;
 }
+
+
+// ════════════════════════════════════════════════════════════
+//  FICHE DE ROUTE IMPRIMABLE (par secteur)
+// ════════════════════════════════════════════════════════════
+
+window.ficheDeRoute = async (secteurId) => {
+  const secteur = await lireSecteur(secteurId);
+  if (!secteur) { toast("Secteur introuvable", "error"); return; }
+
+  const passages = await passagesDuSecteur(secteurId);
+  const rues = ruesDuSecteur(secteur);
+  const notes = toutesLesNotes(secteur);
+  const secondaires = new Set(adressesSecondaires(secteur).map(a =>
+    (a||'').toLowerCase().replace(/[^a-z0-9]/g,'')));
+  const inhab = new Set((secteur.inhabitees||[]).map(a =>
+    (a||'').toLowerCase().replace(/[^a-z0-9]/g,'')));
+  const nrm = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+
+  // Note par adresse pour affichage inline
+  const noteParAdr = {};
+  notes.forEach(n => { noteParAdr[nrm(n.adresse)] = n.texte; });
+
+  let totalFoyers = 0;
+  const blocs = rues.map(r => {
+    let nums = [];
+    try { nums = numerosDeRue(secteur.commune, r.rue, r.restriction); } catch(e) {}
+    const comp = lireComplements(secteur, r.rue);
+    nums = [...new Set([...nums, ...comp])].sort((a,b) =>
+      (parseInt(a)||9999) - (parseInt(b)||9999));
+    nums = nums.filter(n => !secondaires.has(nrm(`${n} ${r.rue}`)));
+    totalFoyers += nums.filter(n => !inhab.has(nrm(`${n} ${r.rue}`))).length;
+    return { rue: r.rue, nums };
+  }).filter(b => b.nums.length > 0);
+
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<title>Fiche de route — ${secteur.nom}</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 10pt;
+         color: #1a1a1a; margin: 0; }
+  header { border-bottom: 2.5pt solid #CC1D1D; padding-bottom: 5pt; margin-bottom: 9pt; }
+  h1 { font-size: 16pt; margin: 0; color: #CC1D1D; }
+  .meta { font-size: 8.5pt; color: #555; margin-top: 2pt; }
+  .synth { display: flex; gap: 10pt; margin: 8pt 0 10pt; font-size: 8.5pt; }
+  .synth div { border: 0.7pt solid #ccc; border-radius: 3pt; padding: 3pt 7pt; }
+  .synth strong { font-size: 11pt; display: block; }
+  .rue { margin-bottom: 7pt; page-break-inside: avoid; }
+  .rue-nom { font-weight: 700; font-size: 10.5pt; background: #f1f2f6;
+             padding: 2.5pt 5pt; border-left: 2.5pt solid #2D3142; }
+  table.nums { width: 100%; border-collapse: collapse; margin-top: 2pt; }
+  table.nums td { border: 0.5pt solid #d5d5d5; padding: 3pt 2pt; text-align: center;
+                  font-size: 8.5pt; width: 6.25%; height: 22pt; vertical-align: top; }
+  .num { font-weight: 700; display: block; font-size: 9pt; }
+  .num-inhab { color: #999; text-decoration: line-through; }
+  .num-note { color: #B45309; font-size: 7pt; }
+  .num-fait { background: #f0f0f0; }
+  .legende { margin-top: 10pt; padding-top: 5pt; border-top: 0.7pt solid #ccc;
+             font-size: 8pt; color: #555; }
+  .notes { margin-top: 8pt; font-size: 8.5pt; page-break-inside: avoid; }
+  .notes h2 { font-size: 10pt; margin: 0 0 3pt; }
+  .notes li { margin-bottom: 1.5pt; }
+  .bilan { margin-top: 12pt; border: 0.7pt solid #999; border-radius: 3pt;
+           padding: 6pt; page-break-inside: avoid; }
+  .bilan h2 { font-size: 10pt; margin: 0 0 5pt; }
+  .bilan-grid { display: flex; gap: 8pt; }
+  .bilan-grid div { flex: 1; font-size: 8.5pt; }
+  .ligne { border-bottom: 0.5pt solid #999; height: 15pt; margin-top: 3pt; }
+  @media print { .noprint { display: none; } }
+</style></head><body>
+<header>
+  <h1>${secteur.nom}</h1>
+  <div class="meta">${secteur.commune} · Amicale des Sapeurs-Pompiers de Pacy-sur-Eure
+    ${secteur.equipNom ? ` · Équipe : ${secteur.equipNom}` : ''}</div>
+</header>
+
+<div class="synth">
+  <div><strong>${totalFoyers}</strong>boîtes à visiter</div>
+  <div><strong>${blocs.length}</strong>rue${blocs.length>1?'s':''}</div>
+  <div><strong>${Math.round(totalFoyers*0.35)}</strong>calendriers visés</div>
+</div>
+
+${blocs.map(b => {
+  const cellules = b.nums.map(n => {
+    const cle = nrm(`${n} ${b.rue}`);
+    const p = passages.find(x => nrm(x.adresse) === cle);
+    const inh = inhab.has(cle);
+    const nt = noteParAdr[cle];
+    return `<td class="${p ? 'num-fait' : ''}">
+      <span class="num ${inh ? 'num-inhab' : ''}">${n}</span>
+      ${nt ? `<span class="num-note">${nt.slice(0,14)}</span>` : ''}
+    </td>`;
+  });
+  const lignes = [];
+  for (let i = 0; i < cellules.length; i += 16) {
+    lignes.push(`<tr>${cellules.slice(i, i+16).join('')}${
+      '<td style="border:none"></td>'.repeat(Math.max(0, 16 - cellules.slice(i, i+16).length))}</tr>`);
+  }
+  return `<div class="rue">
+    <div class="rue-nom">${b.rue} <span style="font-weight:400;font-size:8.5pt">(${b.nums.length})</span></div>
+    <table class="nums">${lignes.join('')}</table>
+  </div>`;
+}).join('')}
+
+<div class="legende">
+  Coche ou annote chaque numéro : <strong>D</strong> don · <strong>O</strong> offert ·
+  <strong>R</strong> refus · <strong>A</strong> absent. Les cases grisées sont déjà saisies dans l'application.
+  Les numéros barrés sont des logements inhabités.
+</div>
+
+${notes.length ? `<div class="notes">
+  <h2>📌 Notes sur le secteur</h2>
+  <ul>${notes.map(n => `<li><strong>${n.adresse}</strong> — ${n.texte}</li>`).join('')}</ul>
+</div>` : ''}
+
+<div class="bilan">
+  <h2>Bilan de la sortie</h2>
+  <div class="bilan-grid">
+    <div>Date<div class="ligne"></div></div>
+    <div>Nom<div class="ligne"></div></div>
+    <div>Calendriers placés<div class="ligne"></div></div>
+  </div>
+  <div class="bilan-grid" style="margin-top:5pt">
+    <div>Espèces<div class="ligne"></div></div>
+    <div>Chèques<div class="ligne"></div></div>
+    <div>Total remis<div class="ligne"></div></div>
+  </div>
+</div>
+
+<div class="noprint" style="margin-top:14pt;text-align:center">
+  <button onclick="window.print()" style="padding:8pt 18pt;font-size:11pt;cursor:pointer">
+    🖨️ Imprimer</button>
+</div>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { toast("Autorise les fenêtres pop-up pour imprimer", "error"); return; }
+  w.document.write(html);
+  w.document.close();
+};
 
 window.editSecteur = async (id) => {
   const s = await lireSecteur(id);
@@ -4723,6 +4943,7 @@ async function renderTerrain() {
   const unsub = ecouterSecteursEquipe(APP.equipeId, (secteurs) => {
     renderTerrainSecteurs(secteurs);
     chargerRelancesEquipe(secteurs);
+    bindDetectionSecteur(secteurs);
   });
   APP.unsubs.push(unsub);
 }
@@ -4784,6 +5005,53 @@ async function chargerRelancesEquipe(secteurs) {
   }
 }
 
+
+// ── Détection GPS du secteur où se trouve l'équipier ──────────────
+function bindDetectionSecteur(secteurs) {
+  const btn = document.getElementById("btn-detect-secteur");
+  const box = document.getElementById("detect-resultat");
+  if (!btn || !box) return;
+
+  btn.addEventListener("click", async () => {
+    setLoading(btn, true);
+    box.classList.remove("hidden");
+    box.className = "detect-resultat detect-resultat--loading";
+    box.innerHTML = "📡 Recherche de ta position…";
+
+    try {
+      const pos = await positionActuelle();
+      const r = await secteurALaPosition(pos.lat, pos.lon, secteurs);
+
+      if (r.secteur) {
+        const s = r.secteur;
+        box.className = "detect-resultat detect-resultat--ok";
+        box.innerHTML = `
+          <div class="dr-titre">📍 Tu es dans <strong>${s.nom}</strong></div>
+          <div class="dr-sous">${s.commune} · position à ±${pos.precision} m</div>
+          <button class="btn btn--primary btn--sm btn--full" onclick="naviguerTerrain('${s.id}')">
+            Ouvrir ce secteur →
+          </button>`;
+      } else if (r.candidats && r.candidats.length) {
+        box.className = "detect-resultat detect-resultat--multi";
+        box.innerHTML = `
+          <div class="dr-titre">📍 Tu es sur ${r.candidats[0].commune}</div>
+          <div class="dr-sous">Plusieurs de tes secteurs s'y trouvent — choisis :</div>
+          ${r.candidats.map(s => `
+            <button class="btn btn--ghost btn--sm btn--full" style="margin-top:4px"
+              onclick="naviguerTerrain('${s.id}')">${s.nom}</button>`).join('')}`;
+      } else {
+        box.className = "detect-resultat detect-resultat--vide";
+        box.innerHTML = `Tu n'es dans aucun de tes secteurs (position à ±${pos.precision} m).<br>
+          <small>Choisis manuellement dans la liste.</small>`;
+      }
+    } catch(e) {
+      box.className = "detect-resultat detect-resultat--erreur";
+      box.innerHTML = `⚠️ ${e.message}`;
+    }
+    setLoading(btn, false);
+  });
+}
+
 function renderTerrainSecteurs(secteurs) {
   const content = document.getElementById("terrain-content");
   if (!content) return;
@@ -4808,6 +5076,11 @@ function renderTerrainSecteurs(secteurs) {
       <div style="font-size:.78rem;color:var(--ardoise-mid);margin-top:6px;">${nbTermines} / ${nbTotal} secteur(s) terminé(s)</div>
     </div>
     <div id="terrain-relances"></div>
+    ${geolocDisponible() && secteurs.length > 1 ? `
+    <button id="btn-detect-secteur" class="btn-detect">
+      📍 Dans quel secteur suis-je ?
+    </button>
+    <div id="detect-resultat" class="detect-resultat hidden"></div>` : ''}
     <div class="terrain-secteurs">
       ${secteurs.map(s => `
         <div class="terrain-secteur-card" onclick="naviguerTerrain('${s.id}')">
