@@ -1,5 +1,5 @@
 // Service Worker — Amicale SP Pacy-sur-Eure
-const CACHE_NAME = "sp-calendriers-v3";
+const CACHE_NAME = "sp-calendriers-v5";
 
 const ASSETS = [
   "./",
@@ -18,7 +18,15 @@ self.addEventListener("install", (event) => {
       .then(c => Promise.allSettled(ASSETS.map(u => c.add(u))))
       .catch(() => {})
   );
-  self.skipWaiting();
+  // Pas de skipWaiting ici : la nouvelle version attend que l'utilisateur
+  // accepte la mise à jour (message ACTIVER_MAINTENANT).
+});
+
+// Prise de contrôle immédiate à la demande de la page
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "ACTIVER_MAINTENANT") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", (event) => {

@@ -1279,6 +1279,72 @@ body {
   font-family: var(--font); font-size: .78rem; color: var(--ardoise-mid);
   text-decoration: underline;
 }
+
+/* ── Bandeau de mise à jour ─────────────────────────────────── */
+.maj-banniere {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9500;
+  background: linear-gradient(135deg, #16A34A 0%, #047857 100%);
+  color: var(--blanc); padding: var(--sp-3) var(--sp-4);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3); flex-wrap: wrap;
+  box-shadow: 0 3px 14px rgba(0,0,0,.22);
+  animation: mj-descend .3s ease;
+}
+@keyframes mj-descend { from { transform: translateY(-100%); } to { transform: none; } }
+.mj-txt { font-size: .86rem; }
+.mj-actions { display: flex; gap: var(--sp-2); align-items: center; }
+.mj-recharger {
+  padding: 7px 16px; background: var(--blanc); color: #047857;
+  border: none; border-radius: var(--r-md); cursor: pointer;
+  font-family: var(--font); font-size: .82rem; font-weight: 700;
+}
+.mj-recharger:active { transform: scale(.96); }
+.mj-plus-tard {
+  padding: 7px 10px; background: none; border: none; cursor: pointer;
+  font-family: var(--font); font-size: .76rem; color: rgba(255,255,255,.85);
+  text-decoration: underline;
+}
+
+/* ── Bannière de mise à jour ─────────────────────────────────── */
+.maj-banniere {
+  position: fixed; left: 12px; right: 12px; top: 12px; z-index: 9500;
+  background: var(--ardoise); color: var(--blanc);
+  border-radius: var(--r-lg); box-shadow: 0 8px 28px rgba(0,0,0,.3);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  max-width: 560px; margin: 0 auto;
+  animation: mb-descend .3s ease;
+}
+@keyframes mb-descend { from { transform: translateY(-20px); opacity: 0; } to { transform: none; opacity: 1; } }
+.mb-txt { flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; }
+.mb-txt strong { font-size: .9rem; }
+.mb-txt span   { font-size: .74rem; opacity: .8; line-height: 1.35; }
+.mb-actions { display: flex; gap: var(--sp-2); align-items: center; }
+.mb-recharger {
+  padding: 8px 16px; background: var(--rouge); color: var(--blanc);
+  border: none; border-radius: var(--r-md); cursor: pointer;
+  font-family: var(--font); font-size: .84rem; font-weight: 700;
+}
+.mb-recharger:active { transform: scale(.96); }
+.mb-fermer {
+  padding: 8px 10px; background: none; border: none; cursor: pointer;
+  font-family: var(--font); font-size: .76rem; color: rgba(255,255,255,.7);
+  text-decoration: underline;
+}
+
+/* ── Boutons sur fond sombre (sidebar, header terrain) ──────── */
+.sidebar-footer .btn--ghost,
+.terrain-header .btn--ghost {
+  color: var(--blanc);
+  border-color: rgba(255,255,255,.35);
+  background: rgba(255,255,255,.06);
+}
+.sidebar-footer .btn--ghost:hover,
+.terrain-header .btn--ghost:hover {
+  background: rgba(255,255,255,.16);
+  border-color: rgba(255,255,255,.6);
+}
+.sidebar-footer .btn--ghost { width: 100%; justify-content: center; }
 </style>
 </head>
 <body>
@@ -2902,6 +2968,168 @@ window.addEventListener('appinstalled', () => {
   fermerBanniere(false);
   localStorage.removeItem(CLE_INSTALL_REFUS);
 });
+
+// ============================================================
+// Détection des mises à jour de l'application
+// ============================================================
+
+const VERIF_MAJ_MS = 15 * 60 * 1000;   // vérification toutes les 15 minutes
+
+function afficherBanniereMAJ(registration) {
+  if (document.getElementById('maj-banniere')) return;
+
+  const el = document.createElement('div');
+  el.id = 'maj-banniere';
+  el.className = 'maj-banniere';
+  el.innerHTML = `
+    <div class="mb-txt">
+      <strong>Nouvelle version disponible</strong>
+      <span>Recharge pour en profiter — tes saisies sont conservées.</span>
+    </div>
+    <div class="mb-actions">
+      <button class="mb-recharger" data-action="maj">Recharger</button>
+      <button class="mb-fermer" data-action="fermer">Plus tard</button>
+    </div>`;
+  document.body.appendChild(el);
+
+  el.addEventListener('click', (ev) => {
+    const act = ev.target.dataset?.action;
+    if (act === 'fermer') { el.remove(); return; }
+    if (act === 'maj') {
+      const attente = registration.waiting;
+      if (attente) {
+        // Demander au nouveau Service Worker de prendre le relais
+        attente.postMessage({ type: 'ACTIVER_MAINTENANT' });
+        // Le rechargement se fera au changement de contrôleur
+        setTimeout(() => window.location.reload(), 400);
+      } else {
+        window.location.reload();
+      }
+    }
+  });
+}
+
+// Surveille l'arrivée d'une nouvelle version du Service Worker
+window.__surveillerMAJ = function (registration) {
+  if (!registration) return;
+
+  // Une version est déjà en attente (l'utilisateur a rechargé sans l'activer)
+  if (registration.waiting && navigator.serviceWorker.controller) {
+    afficherBanniereMAJ(registration);
+  }
+
+  // Une nouvelle version est en cours d'installation
+  registration.addEventListener('updatefound', () => {});
+  registration.onupdatefound = () => {
+    const nouveau = registration.installing;
+    if (!nouveau) return;
+    nouveau.addEventListener('statechange', () => {
+      // "installed" + un contrôleur existant = c'est une mise à jour, pas une première install
+      if (nouveau.state === 'installed' && navigator.serviceWorker.controller) {
+        afficherBanniereMAJ(registration);
+      }
+    });
+  };
+
+  // Vérifications périodiques et au retour au premier plan
+  const verifier = () => registration.update().catch(() => {});
+  setInterval(verifier, VERIF_MAJ_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') verifier();
+  });
+  window.addEventListener('online', verifier);
+};
+
+// Recharger une seule fois quand le nouveau Service Worker prend le contrôle
+let _dejaRecharge = false;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_dejaRecharge) return;
+    _dejaRecharge = true;
+    window.location.reload();
+  });
+}
+
+// ============================================================
+// maj.js — Détection et application des mises à jour
+// Amicale SP Pacy-sur-Eure — Tournée Calendriers
+// ============================================================
+
+let _registration = null;
+let _banniereAffichee = false;
+
+// Affiche le bandeau proposant de recharger
+function proposerMiseAJour(worker) {
+  if (_banniereAffichee) return;
+  _banniereAffichee = true;
+
+  const el = document.createElement('div');
+  el.id = 'maj-banniere';
+  el.className = 'maj-banniere';
+  el.innerHTML = `
+    <span class="mj-txt">✨ <strong>Nouvelle version disponible</strong></span>
+    <div class="mj-actions">
+      <button class="mj-recharger">Mettre à jour</button>
+      <button class="mj-plus-tard">Plus tard</button>
+    </div>`;
+  document.body.appendChild(el);
+
+  el.querySelector('.mj-recharger').addEventListener('click', () => {
+    el.querySelector('.mj-recharger').textContent = 'Mise à jour…';
+    // Demander au nouveau Service Worker de prendre la main immédiatement
+    if (worker) worker.postMessage({ type: 'ACTIVER_MAINTENANT' });
+    // Sécurité : recharger même si le message n'aboutit pas
+    setTimeout(() => window.location.reload(), 1200);
+  });
+
+  el.querySelector('.mj-plus-tard').addEventListener('click', () => {
+    el.remove();
+    _banniereAffichee = false;
+  });
+}
+
+// Surveille l'arrivée d'une nouvelle version
+function surveillerMiseAJour(registration) {
+  if (!registration) return;
+  _registration = registration;
+
+  // Une nouvelle version est déjà installée et attend
+  if (registration.waiting && navigator.serviceWorker.controller) {
+    proposerMiseAJour(registration.waiting);
+  }
+
+  // Une nouvelle version arrive pendant la session
+  registration.addEventListener('updatefound', () => {});
+  registration.onupdatefound = () => {
+    const nouveau = registration.installing;
+    if (!nouveau) return;
+    nouveau.addEventListener('statechange', () => {
+      if (nouveau.state === 'installed' && navigator.serviceWorker.controller) {
+        proposerMiseAJour(nouveau);
+      }
+    });
+  };
+
+  // Vérifier périodiquement (toutes les 30 min) et au retour au premier plan
+  const verifier = () => { registration.update().catch(() => {}); };
+  setInterval(verifier, 30 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') verifier();
+  });
+}
+
+// Recharger la page dès que le nouveau Service Worker prend le contrôle
+let _rechargeFaite = false;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_rechargeFaite) return;
+    _rechargeFaite = true;
+    window.location.reload();
+  });
+}
+
+// Exposition pour le script d'enregistrement (hors module ES)
+window.__surveillerMAJ = surveillerMiseAJour;
 
 // ============================================================
 // notifications.js — Notifications locales (résumé quotidien)
@@ -7019,7 +7247,9 @@ function renderPodiumPlace(eq, place, secteurs) {
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(()=>{});
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => { if (window.__surveillerMAJ) window.__surveillerMAJ(reg); })
+          .catch(()=>{});
       });
     }
   </script>
