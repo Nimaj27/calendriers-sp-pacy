@@ -1,5 +1,5 @@
 // Service Worker — Amicale SP Pacy-sur-Eure
-const CACHE_NAME = "sp-calendriers-v7";
+const CACHE_NAME = "sp-calendriers-v8";
 
 const ASSETS = [
   "./",

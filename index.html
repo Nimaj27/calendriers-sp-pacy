@@ -1394,6 +1394,13 @@ body {
 .st-m-barre-zone { flex: 1; background: var(--gris-fond); border-radius: 99px; height: 18px; overflow: hidden; }
 .st-m-barre { height: 100%; background: linear-gradient(90deg, var(--vert) 0%, #16A34A 100%); border-radius: 99px; transition: width .4s; }
 .st-m-nb { font-size: .78rem; font-weight: 600; color: var(--ardoise-mid); width: 42px; flex-shrink: 0; }
+
+/* ── Bloc d'action destructive (page Config) ────────────────── */
+.form-card--danger {
+  border-color: var(--rouge-light);
+  background: #FFFBFB;
+}
+.form-card--danger h2 { color: var(--rouge-dark); }
 </style>
 </head>
 <body>
@@ -1948,6 +1955,30 @@ function telechargerCSV(csv, filename="bilan-tournee-calendriers.csv") {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a"); a.href=url; a.download=filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+
+// ── Effacement de tous les passages (nettoyage des saisies de test) ──
+// Les secteurs et les équipes sont conservés ; seuls les passages sont
+// supprimés et les totaux des secteurs remis à zéro.
+async function effacerTousLesPassages() {
+  const passages = await fsGetAll(COLLECTIONS.PASSAGES);
+  let supprimes = 0, erreurs = 0;
+  for (const p of passages) {
+    try { await fsDelete(COLLECTIONS.PASSAGES, p.id); supprimes++; }
+    catch(e) { erreurs++; }
+  }
+  // Remettre à zéro les compteurs de chaque secteur
+  const secteurs = await fsGetAll(COLLECTIONS.SECTEURS);
+  for (const s of secteurs) {
+    try {
+      await fsUpdate(COLLECTIONS.SECTEURS, s.id, {
+        totalCollecte: 0, nbFoyersVisites: 0, nbFoyersAbsents: 0,
+        nbCalendriers: 0, nbFoyersTotal: 0
+      });
+    } catch(e) { /* on continue */ }
+  }
+  return { supprimes, erreurs, secteurs: secteurs.length };
 }
 
 // ── Polygones précalculés des secteurs découpés ──
@@ -5874,6 +5905,17 @@ async function renderConfig() {
       <button id="btn-migrer-pins" class="btn btn--primary">🔐 Sécuriser les codes PIN</button>
     </div>
 
+    <div class="form-card form-card--danger" style="margin-top:24px;">
+      <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:8px;">🧹 Effacer les saisies</h2>
+      <p style="font-size:.85rem;color:var(--ardoise-mid);margin-bottom:16px;line-height:1.5;">
+        Supprime <strong>tous les passages</strong> et remet les compteurs des secteurs à zéro.
+        Les secteurs, les équipes et leurs affectations sont conservés.
+        Pratique pour repartir propre après une phase de test.
+      </p>
+      <div id="effacer-etat" class="notif-etat"></div>
+      <button id="btn-effacer-passages" class="btn btn--danger">🧹 Effacer tous les passages</button>
+    </div>
+
     <div class="form-card" style="margin-top:24px;">
       <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:8px;">🛟 Sauvegarde</h2>
       <p style="font-size:.85rem;color:var(--ardoise-mid);margin-bottom:16px;line-height:1.5;">
@@ -6001,6 +6043,61 @@ async function renderConfig() {
       const r = await migrerPins();
       toast(`${r.deplaces} code(s) sécurisé(s)${r.conflits ? ` · ${r.conflits} conflit(s)` : ''}`,
             r.conflits ? "error" : "success");
+      naviguer("#config");
+    } catch(e) {
+      toast("Erreur : " + e.message, "error");
+      setLoading(btn, false);
+    }
+  });
+
+  // Nombre de passages actuellement enregistrés
+  (async () => {
+    const el = document.getElementById("effacer-etat");
+    if (!el) return;
+    try {
+      const p = await fsGetAll(COLLECTIONS.PASSAGES);
+      if (p.length === 0) {
+        el.className = "notif-etat notif-etat--on";
+        el.textContent = "Aucun passage enregistré, rien à effacer.";
+        const b = document.getElementById("btn-effacer-passages");
+        if (b) b.disabled = true;
+      } else {
+        const montant = p.filter(x => x.statut === "don")
+                         .reduce((s, x) => s + Number(x.montant || 0), 0);
+        el.className = "notif-etat notif-etat--pending";
+        el.textContent = `${p.length} passage(s) enregistré(s), pour ${formatMontant(montant)} collecté(s).`;
+      }
+    } catch(e) {
+      el.className = "notif-etat notif-etat--off";
+      el.textContent = "Impossible de compter les passages : " + e.message;
+    }
+  })();
+
+  document.getElementById("btn-effacer-passages")?.addEventListener("click", async () => {
+    const passages = await fsGetAll(COLLECTIONS.PASSAGES);
+    if (passages.length === 0) { toast("Aucun passage à effacer", "info"); return; }
+
+    const montant = passages.filter(x => x.statut === "don")
+                            .reduce((s, x) => s + Number(x.montant || 0), 0);
+
+    if (!confirm(
+      `⚠️ EFFACER TOUS LES PASSAGES ?\n\n` +
+      `${passages.length} passage(s) et ${formatMontant(montant)} de collecte vont être définitivement supprimés.\n` +
+      `Les secteurs et les équipes seront conservés.\n\n` +
+      `Pense à avoir téléchargé une sauvegarde.`
+    )) return;
+
+    const saisie = prompt(
+      `Dernière confirmation.\n\nTape EFFACER (en majuscules) pour supprimer les ${passages.length} passages :`
+    );
+    if (saisie !== "EFFACER") { toast("Effacement annulé", "info"); return; }
+
+    const btn = document.getElementById("btn-effacer-passages");
+    setLoading(btn, true);
+    try {
+      const r = await effacerTousLesPassages();
+      toast(`${r.supprimes} passage(s) effacé(s)${r.erreurs ? ` · ${r.erreurs} erreur(s)` : ''} · ${r.secteurs} secteur(s) remis à zéro`,
+            r.erreurs ? "error" : "success");
       naviguer("#config");
     } catch(e) {
       toast("Erreur : " + e.message, "error");
