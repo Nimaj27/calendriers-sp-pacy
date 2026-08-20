@@ -3502,6 +3502,16 @@ async function purgerJournal(avantISO) {
   return n;
 }
 
+// Vide entièrement le journal
+async function viderJournal() {
+  const tout = await fsGetAll(COLLECTIONS.JOURNAL);
+  let n = 0;
+  for (const e of tout) {
+    try { await fsDelete(COLLECTIONS.JOURNAL, e.id); n++; } catch(err) { /* on continue */ }
+  }
+  return n;
+}
+
 // Écart financier cumulé induit par les corrections (indicateur de contrôle)
 function ecartCumule(entrees) {
   return entrees.reduce((s, e) => s + ((e.montantApres || 0) - (e.montantAvant || 0)), 0);
@@ -5913,6 +5923,10 @@ async function renderConfig() {
         Pratique pour repartir propre après une phase de test.
       </p>
       <div id="effacer-etat" class="notif-etat"></div>
+      <label class="checkbox-label" style="margin-bottom:14px;">
+        <input type="checkbox" id="eff-journal">
+        Effacer aussi le journal des modifications
+      </label>
       <button id="btn-effacer-passages" class="btn btn--danger">🧹 Effacer tous les passages</button>
     </div>
 
@@ -6065,7 +6079,10 @@ async function renderConfig() {
         const montant = p.filter(x => x.statut === "don")
                          .reduce((s, x) => s + Number(x.montant || 0), 0);
         el.className = "notif-etat notif-etat--pending";
-        el.textContent = `${p.length} passage(s) enregistré(s), pour ${formatMontant(montant)} collecté(s).`;
+        let nj = 0;
+        try { nj = (await lireJournal({ limite: 9999 })).length; } catch(e) {}
+        el.textContent = `${p.length} passage(s) enregistré(s), pour ${formatMontant(montant)} collecté(s).`
+                       + (nj ? ` Journal : ${nj} trace(s).` : '');
       }
     } catch(e) {
       el.className = "notif-etat notif-etat--off";
@@ -6080,9 +6097,12 @@ async function renderConfig() {
     const montant = passages.filter(x => x.statut === "don")
                             .reduce((s, x) => s + Number(x.montant || 0), 0);
 
+    const avecJournal = document.getElementById("eff-journal")?.checked || false;
+
     if (!confirm(
       `⚠️ EFFACER TOUS LES PASSAGES ?\n\n` +
       `${passages.length} passage(s) et ${formatMontant(montant)} de collecte vont être définitivement supprimés.\n` +
+      (avecJournal ? `Le journal des modifications sera également vidé.\n` : '') +
       `Les secteurs et les équipes seront conservés.\n\n` +
       `Pense à avoir téléchargé une sauvegarde.`
     )) return;
@@ -6096,7 +6116,14 @@ async function renderConfig() {
     setLoading(btn, true);
     try {
       const r = await effacerTousLesPassages();
-      toast(`${r.supprimes} passage(s) effacé(s)${r.erreurs ? ` · ${r.erreurs} erreur(s)` : ''} · ${r.secteurs} secteur(s) remis à zéro`,
+      let msgJournal = '';
+      if (avecJournal) {
+        try {
+          const nj = await viderJournal();
+          msgJournal = ` · ${nj} trace(s) de journal effacée(s)`;
+        } catch(e) { msgJournal = ' · journal non vidé'; }
+      }
+      toast(`${r.supprimes} passage(s) effacé(s)${r.erreurs ? ` · ${r.erreurs} erreur(s)` : ''} · ${r.secteurs} secteur(s) remis à zéro${msgJournal}`,
             r.erreurs ? "error" : "success");
       naviguer("#config");
     } catch(e) {
