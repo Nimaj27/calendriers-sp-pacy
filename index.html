@@ -1345,6 +1345,18 @@ body {
   border-color: rgba(255,255,255,.6);
 }
 .sidebar-footer .btn--ghost { width: 100%; justify-content: center; }
+
+/* ── Journal des modifications ──────────────────────────────── */
+.jr-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 99px;
+  font-size: .72rem; font-weight: 700; white-space: nowrap;
+}
+.jr-badge--modification { background: var(--bleu-light); color: var(--bleu); }
+.jr-badge--suppression  { background: var(--rouge-light); color: var(--rouge-dark); }
+.jr-badge--fusion       { background: var(--jaune-light); color: #92400E; }
+.jr-badge--inhabitee    { background: var(--gris-fond); color: var(--ardoise-mid); }
+.jr-supp td { background: rgba(239,68,68,.04); }
+.stat-card--alerte { border-color: var(--orange); background: #FFFBEB; }
 </style>
 </head>
 <body>
@@ -1399,7 +1411,8 @@ const COLLECTIONS = {
   SECTEURS: "secteurs",
   PASSAGES: "passages",
   ADMINS:   "admins",
-  PINS:     "pins"      // { pin } → { equipeId } : le code est l'identifiant du document
+  PINS:     "pins",     // { pin } → { equipeId } : le code est l'identifiant du document
+  JOURNAL:  "journal"   // traçabilité des corrections et suppressions
 };
 
 const fsCollection = (name)          => collection(db, name);
@@ -3287,6 +3300,88 @@ async function envoyerResumeMaintenant(getDonnees, iconeBase64 = null) {
   return resume;
 }
 
+// ============================================================
+// journal.js — Journal des modifications
+// Amicale SP Pacy-sur-Eure — Tournée Calendriers
+//
+// Trace les corrections et suppressions de passages : qui, quoi, quand.
+// Utile en cas d'écart constaté au moment des comptes.
+// ============================================================
+
+
+const ACTIONS = {
+  MODIFICATION: "modification",
+  SUPPRESSION:  "suppression",
+  FUSION:       "fusion",
+  INHABITEE:    "inhabitee"
+};
+
+const ACTION_LABEL = {
+  modification: "Correction",
+  suppression:  "Suppression",
+  fusion:       "Regroupement",
+  inhabitee:    "Marqué inhabité"
+};
+
+// Résumé lisible d'un passage, pour garder une trace de ce qui a été touché
+function resumer(p) {
+  if (!p) return "";
+  const bouts = [];
+  if (p.adresse) bouts.push(p.adresse);
+  if (p.statut === "don")         bouts.push(`don ${Number(p.montant || 0).toFixed(2)} €`);
+  else if (p.statut === "offert") bouts.push("offert");
+  else if (p.statut === "refuse") bouts.push("refus");
+  else if (p.statut === "absent" || p.statut === "relance") bouts.push("absent");
+  if (p.modePaiement) bouts.push(p.modePaiement);
+  return bouts.join(" · ");
+}
+
+// Enregistre une entrée. N'échoue jamais bruyamment : la traçabilité ne doit
+// pas empêcher un équipier de travailler si l'écriture échoue.
+async function tracer(action, { avant = null, apres = null, contexte = "", auteur = null } = {}) {
+  try {
+    const a = auteur || {};
+    await fsAdd(COLLECTIONS.JOURNAL, {
+      action,
+      date: new Date().toISOString(),
+      parQui: a.membre || a.email || a.equipeNom || "inconnu",
+      equipeNom: a.equipeNom || null,
+      role: a.role || null,
+      contexte,
+      avant: avant ? resumer(avant) : null,
+      apres: apres ? resumer(apres) : null,
+      montantAvant: avant && avant.statut === "don" ? Number(avant.montant || 0) : 0,
+      montantApres: apres && apres.statut === "don" ? Number(apres.montant || 0) : 0,
+      secteurId: (apres && apres.secteurId) || (avant && avant.secteurId) || null
+    });
+  } catch (e) {
+    console.warn("Journal indisponible :", e?.message || e);
+  }
+}
+
+// Lecture, du plus récent au plus ancien
+async function lireJournal({ limite = 300 } = {}) {
+  const tout = await fsGetAll(COLLECTIONS.JOURNAL);
+  return tout
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+    .slice(0, limite);
+}
+
+// Purge des entrées antérieures à une date (nettoyage de fin de saison)
+async function purgerJournal(avantISO) {
+  const tout = await fsGetAll(COLLECTIONS.JOURNAL);
+  let n = 0;
+  for (const e of tout) {
+    if ((e.date || "") < avantISO) { await fsDelete(COLLECTIONS.JOURNAL, e.id); n++; }
+  }
+  return n;
+}
+
+// Écart financier cumulé induit par les corrections (indicateur de contrôle)
+function ecartCumule(entrees) {
+  return entrees.reduce((s, e) => s + ((e.montantApres || 0) - (e.montantAvant || 0)), 0);
+}
+
 
 // ── Drapeaux de fonctionnalités ─────────────────────────────
 // Passer à true quand le bureau de l'amicale aura validé les notifications
@@ -3362,6 +3457,7 @@ const ROUTES = {
   "#relances":           renderRelances,
   "#historique":         renderHistorique,
   "#classement":         renderClassement,
+  "#journal":            renderJournal,
   "#config":             renderConfig,
   "#terrain":            renderTerrain,
   "#terrain-passages":   renderTerrainPassages
@@ -3680,6 +3776,7 @@ function layoutAdmin(activeHash, content) {
     { hash: "#relances",  icon: "🔔", label: "Relances" },
     { hash: "#historique", icon: "📅", label: "Historique" },
     { hash: "#classement", icon: "🏆", label: "Classement" },
+    { hash: "#journal",    icon: "📜", label: "Journal" },
     { hash: "#config",    icon: "⚙️",  label: "Config" }
   ];
   return `
@@ -4958,6 +5055,8 @@ window.traiterRelance = async (passageId, secteurId) => {
         secteurId
       });
 
+      tracer(ACTIONS.MODIFICATION, { avant: p, apres: { adresse: p.adresse, statut: st, montant: st === "don" ? Number(montant) : 0 },
+                                     contexte: "relance", auteur: auteurCourant() });
       toast(st === "don" ? `Don de ${formatMontant(montant)} enregistré ✅`
             : st === "refuse" ? "Refus enregistré" : "Relance mise à jour", "success");
       document.getElementById("modal-relance")?.classList.add("hidden");
@@ -5298,6 +5397,127 @@ function showArchiverModal() {
 }
 
 
+
+
+// ════════════════════════════════════════════════════════════
+//  JOURNAL DES MODIFICATIONS
+// ════════════════════════════════════════════════════════════
+
+async function renderJournal() {
+  if (APP.role !== "admin") { naviguer("#login"); return; }
+  stopUnsubs();
+
+  document.getElementById("main").innerHTML = layoutAdmin("#journal", `
+    <div class="page-header">
+      <h1>📜 Journal des modifications</h1>
+      <button id="btn-export-journal" class="btn btn--ghost">⬇️ Exporter</button>
+    </div>
+    <p style="font-size:.85rem;color:var(--ardoise-mid);margin-bottom:16px;line-height:1.5;">
+      Trace des corrections et suppressions de passages. Utile en cas d'écart constaté au moment des comptes.
+    </p>
+    <div class="filter-bar">
+      <input id="jr-recherche" class="input input--sm" placeholder="🔍 Filtrer par personne, adresse…" style="max-width:300px;">
+      <select id="jr-type" class="input input--sm" style="max-width:200px;">
+        <option value="">Toutes les actions</option>
+        <option value="modification">Corrections</option>
+        <option value="suppression">Suppressions</option>
+      </select>
+    </div>
+    <div id="journal-content"><div class="loader">Chargement…</div></div>
+  `);
+  bindLogout();
+
+  let entrees = [];
+
+  function afficher() {
+    const q = (document.getElementById("jr-recherche")?.value || "").toLowerCase().trim();
+    const type = document.getElementById("jr-type")?.value || "";
+    const filtrees = entrees.filter(e => {
+      if (type && e.action !== type) return false;
+      if (!q) return true;
+      return [e.parQui, e.equipeNom, e.avant, e.apres, e.contexte]
+        .filter(Boolean).join(" ").toLowerCase().includes(q);
+    });
+
+    const el = document.getElementById("journal-content");
+    if (!el) return;
+
+    if (entrees.length === 0) {
+      el.innerHTML = `<p class="empty-state">Aucune modification enregistrée.<br>
+        <small>Les corrections et suppressions apparaîtront ici.</small></p>`;
+      return;
+    }
+
+    const ecart = ecartCumule(filtrees);
+    const nbSupp = filtrees.filter(e => e.action === "suppression").length;
+    const nbMod  = filtrees.filter(e => e.action === "modification").length;
+
+    el.innerHTML = `
+      <div class="stats-grid" style="margin-bottom:16px;">
+        <div class="stat-card"><div class="stat-value">${nbMod}</div><div class="stat-label">Correction${nbMod>1?'s':''}</div></div>
+        <div class="stat-card"><div class="stat-value">${nbSupp}</div><div class="stat-label">Suppression${nbSupp>1?'s':''}</div></div>
+        <div class="stat-card ${Math.abs(ecart) > 0.009 ? 'stat-card--alerte' : ''}">
+          <div class="stat-value" style="color:${ecart < -0.009 ? 'var(--rouge)' : ecart > 0.009 ? 'var(--vert)' : 'var(--ardoise)'}">
+            ${ecart >= 0 ? '+' : ''}${formatMontant(ecart)}
+          </div>
+          <div class="stat-label">Écart cumulé</div>
+          <div class="stat-sub">effet des corrections sur les montants</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Quand</th><th>Qui</th><th>Action</th><th>Avant</th><th>Après</th><th>Écart</th></tr></thead>
+          <tbody>
+            ${filtrees.map(e => {
+              const d = e.date ? new Date(e.date) : null;
+              const ec = (e.montantApres || 0) - (e.montantAvant || 0);
+              return `<tr class="${e.action === 'suppression' ? 'jr-supp' : ''}">
+                <td style="white-space:nowrap">
+                  ${d ? d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}) : '—'}
+                  <br><small style="color:var(--ardoise-mid)">${d ? d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : ''}</small>
+                </td>
+                <td>${e.parQui || '—'}${e.equipeNom ? `<br><small style="color:var(--ardoise-mid)">${e.equipeNom}</small>` : ''}</td>
+                <td><span class="jr-badge jr-badge--${e.action}">${ACTION_LABEL[e.action] || e.action}</span>
+                    ${e.contexte ? `<br><small style="color:var(--ardoise-mid)">${e.contexte}</small>` : ''}</td>
+                <td style="font-size:.82rem">${e.avant || '—'}</td>
+                <td style="font-size:.82rem">${e.apres || '<em style="color:var(--rouge)">supprimé</em>'}</td>
+                <td style="font-weight:700;color:${ec < -0.009 ? 'var(--rouge)' : ec > 0.009 ? 'var(--vert)' : 'var(--ardoise-mid)'}">
+                  ${Math.abs(ec) > 0.009 ? (ec > 0 ? '+' : '') + formatMontant(ec) : '—'}
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${filtrees.length === 0 ? '<p class="empty-state">Aucun résultat pour ce filtre.</p>' : ''}
+    `;
+  }
+
+  try {
+    entrees = await lireJournal({ limite: 400 });
+    afficher();
+  } catch(e) {
+    document.getElementById("journal-content").innerHTML =
+      `<p class="empty-state">Erreur de chargement : ${e.message}</p>`;
+  }
+
+  document.getElementById("jr-recherche")?.addEventListener("input", afficher);
+  document.getElementById("jr-type")?.addEventListener("change", afficher);
+
+  document.getElementById("btn-export-journal")?.addEventListener("click", () => {
+    let csv = "Date;Heure;Qui;Équipe;Action;Contexte;Avant;Après;Écart (€)\n";
+    for (const e of entrees) {
+      const d = e.date ? new Date(e.date) : null;
+      const ec = (e.montantApres || 0) - (e.montantAvant || 0);
+      csv += `"${d ? d.toLocaleDateString('fr-FR') : ''}";"${d ? d.toLocaleTimeString('fr-FR') : ''}";`
+           + `"${e.parQui || ''}";"${e.equipeNom || ''}";"${ACTION_LABEL[e.action] || e.action}";`
+           + `"${e.contexte || ''}";"${e.avant || ''}";"${e.apres || ''}";"${ec.toFixed(2)}"\n`;
+    }
+    telechargerCSV(csv, `journal-modifications-${new Date().toISOString().slice(0,10)}.csv`);
+    toast("Journal exporté", "success");
+  });
+}
 
 // ════════════════════════════════════════════════════════════
 //  CONFIG
@@ -6228,7 +6448,7 @@ window.corrigerPassage = async (passageId, secteurId) => {
 
       const statutFinal = (statut === "absent" && aRelancer) ? "relance" : statut;
 
-      await modifierPassage(passageId, {
+      const apres = {
         adresse,
         statut: statutFinal,
         montant: statut === "don" ? Number(montant) : 0,
@@ -6237,7 +6457,9 @@ window.corrigerPassage = async (passageId, secteurId) => {
         note,
         aRelancer: statut === "absent" ? aRelancer : false,
         secteurId
-      });
+      };
+      await modifierPassage(passageId, apres);
+      tracer(ACTIONS.MODIFICATION, { avant: p, apres, auteur: auteurCourant() });
 
       toast("Passage corrigé ✅", "success");
       fermerCorrection();
@@ -6252,6 +6474,7 @@ window.corrigerPassage = async (passageId, secteurId) => {
     const btn = document.getElementById("cp-delete");
     setLoading(btn, true);
     try {
+      tracer(ACTIONS.SUPPRESSION, { avant: p, contexte: "correction terrain", auteur: auteurCourant() });
       await supprimerPassage(passageId, secteurId);
       toast("Passage supprimé", "success");
       fermerCorrection();
@@ -6914,7 +7137,7 @@ window.saisirNumero = async (numero, rue) => {
 
   window._mnStatut = null;
   window._mnMode = "especes";
-  window._mnCtx = { secteurId, secteur, adresse, existantId: existant?.id || null };
+  window._mnCtx = { secteurId, secteur, adresse, existantId: existant?.id || null, existant: existant || null };
 
   document.getElementById("mn-valider")?.addEventListener("click", async () => {
     const btn = document.getElementById("mn-valider");
@@ -6932,6 +7155,8 @@ window.saisirNumero = async (numero, rue) => {
         aRelancer: st === "absent"
       };
       if (ctx.existantId) {
+        tracer(ACTIONS.MODIFICATION, { avant: ctx.existant || null, apres: { ...data, secteurId: ctx.secteurId },
+                                       contexte: "mode rue", auteur: auteurCourant() });
         await modifierPassage(ctx.existantId, { ...data, secteurId: ctx.secteurId });
       } else {
         await ajouterPassage({
@@ -7046,11 +7271,25 @@ window.mnMode = (mode) => {
 window.mnSupprimer = async (passageId, secteurId) => {
   if (!confirm("Supprimer ce passage ?")) return;
   try {
+    const liste = await passagesDuSecteur(secteurId);
+    const avant = liste.find(x => x.id === passageId) || null;
+    tracer(ACTIONS.SUPPRESSION, { avant, contexte: "mode rue", auteur: auteurCourant() });
     await supprimerPassage(passageId, secteurId);
     document.getElementById("modal-num").classList.add("hidden");
     toast("Passage supprimé", "success");
   } catch(e) { toast("Erreur : " + e.message, "error"); }
 };
+
+
+// Identité de la personne qui agit, pour le journal des modifications
+function auteurCourant() {
+  return {
+    role: APP.role,
+    email: APP.user?.email || null,
+    membre: APP.membre || null,
+    equipeNom: APP.equipeNom || null
+  };
+}
 
 // ════════════════════════════════════════════════════════════
 //  RACCOURCIS DE SAISIE (fluidité terrain)
@@ -7140,6 +7379,7 @@ window.annulerDerniereSaisie = async () => {
       : STATUT_PASSAGE_LABEL[dernier.statut] || dernier.statut;
     if (!confirm(`Annuler cette saisie ?\n\n« ${dernier.adresse || 'sans adresse'} » — ${desc}`)) return;
 
+    tracer(ACTIONS.SUPPRESSION, { avant: dernier, contexte: "annulation immédiate", auteur: auteurCourant() });
     await supprimerPassage(dernier.id, d.secteurId);
     APP._dernierPassage = null;
     document.getElementById("raccourcis-adresse")?.classList.add("hidden");
