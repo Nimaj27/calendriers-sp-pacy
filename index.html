@@ -1357,6 +1357,43 @@ body {
 .jr-badge--inhabitee    { background: var(--gris-fond); color: var(--ardoise-mid); }
 .jr-supp td { background: rgba(239,68,68,.04); }
 .stat-card--alerte { border-color: var(--orange); background: #FFFBEB; }
+
+/* ── Historique par adresse ─────────────────────────────────── */
+.mn-histo {
+  font-size: .78rem; line-height: 1.45;
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm);
+  background: var(--vert-light); color: #14532D;
+  margin-bottom: var(--sp-3); font-weight: 500;
+}
+.mr-don {
+  position: absolute; bottom: 1px; right: 3px;
+  font-size: .58rem; font-weight: 800; font-style: normal;
+  color: #16A34A; line-height: 1;
+}
+.mr-num { position: relative; }
+
+/* ── Statistiques : créneaux horaires ───────────────────────── */
+.st-heures {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 160px; padding: var(--sp-3) 0;
+}
+.st-heure { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.st-h-barre-zone {
+  flex: 1; width: 100%; display: flex; flex-direction: column;
+  justify-content: flex-end; align-items: center; gap: 3px;
+}
+.st-h-taux { font-size: .6rem; font-weight: 700; color: var(--ardoise-mid); }
+.st-h-barre { width: 100%; max-width: 34px; border-radius: 3px 3px 0 0; min-height: 3px; transition: height .4s; }
+.st-h-label { font-size: .7rem; font-weight: 600; color: var(--ardoise); margin-top: 4px; }
+.st-h-nb    { font-size: .62rem; color: var(--ardoise-mid); }
+
+/* ── Statistiques : montants ────────────────────────────────── */
+.st-montants { display: flex; flex-direction: column; gap: 6px; }
+.st-montant { display: flex; align-items: center; gap: var(--sp-3); }
+.st-m-val { font-size: .84rem; font-weight: 700; color: var(--ardoise); width: 52px; text-align: right; flex-shrink: 0; }
+.st-m-barre-zone { flex: 1; background: var(--gris-fond); border-radius: 99px; height: 18px; overflow: hidden; }
+.st-m-barre { height: 100%; background: linear-gradient(90deg, var(--vert) 0%, #16A34A 100%); border-radius: 99px; transition: width .4s; }
+.st-m-nb { font-size: .78rem; font-weight: 600; color: var(--ardoise-mid); width: 42px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -2202,15 +2239,43 @@ async function secteurALaPosition(lat, lon, secteurs) {
 
 const COLLECTION_HISTORIQUE = "historique_saisons";
 
+// Normalisation d'adresse, commune à l'archivage et à la consultation
+function normAdresse(s) {
+  return (s || '').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+}
+
 async function archiverSaison(annee) {
   if (!annee||!/^\d{4}$/.test(String(annee))) throw new Error("Année invalide");
   const [secteurs, equipes, stats] = await Promise.all([lireSecteurs(), lireEquipes(), statsGlobalesTournee()]);
+
+  // Détail par adresse : ce que chaque foyer a donné cette année-là
+  const passages = await fsGetAll(COLLECTIONS.PASSAGES);
+  const secteurNom = Object.fromEntries(secteurs.map(s => [s.id, s.nom]));
+  const adresses = {};
+  for (const p of passages) {
+    const a = (p.adresse || '').trim();
+    if (!a) continue;
+    const clef = normAdresse(a);
+    // On conserve le passage le plus significatif (un don prime sur un refus)
+    const existant = adresses[clef];
+    const montant = p.statut === "don" ? Number(p.montant || 0) : 0;
+    if (!existant || montant > (existant.m || 0)) {
+      adresses[clef] = {
+        a,                                   // adresse lisible
+        s: p.statut,                         // statut
+        m: montant,                          // montant
+        sc: secteurNom[p.secteurId] || null  // secteur
+      };
+    }
+  }
   const snapshot = {
     annee:Number(annee), dateArchivage:new Date().toISOString(),
     totalCollecte:stats.totalCollecte, totalEspeces:stats.totalEspeces, totalCheques:stats.totalCheques, totalCarte:stats.totalCarte||0,
     nbDons:stats.nbDons, nbPassages:stats.nbPassages, nbSecteursTotal:stats.nbSecteursTotal, nbSecteursTermines:stats.nbSecteursTermines,
     secteurs:secteurs.map(s=>({ nom:s.nom, commune:s.commune, equipeNom:s.equipNom||null, totalCollecte:s.totalCollecte||0, nbFoyersVisites:s.nbFoyersVisites||0, nbFoyersAbsents:s.nbFoyersAbsents||0, statut:s.statut })),
-    equipes:stats.parEquipe.map(eq=>({ nom:eq.nom, montant:eq.montant, nbPassages:eq.nbPassages }))
+    equipes:stats.parEquipe.map(eq=>({ nom:eq.nom, montant:eq.montant, nbPassages:eq.nbPassages })),
+    adresses
   };
   await fsSet(COLLECTION_HISTORIQUE, String(annee), snapshot);
   return snapshot;
@@ -2250,6 +2315,35 @@ function comparerSaisons(a, b) {
     return { nom:sA.nom, commune:sA.commune, montantA:sA.totalCollecte, montantB:sB?sB.totalCollecte:null, ecart, ecartPct, tendance:ecart===null?"nouveau":ecart>0?"hausse":ecart<0?"baisse":"stable" };
   });
   return { anneeA:a.annee, anneeB:b.annee, totalA:a.totalCollecte, totalB:b.totalCollecte, ecartTotal, ecartPourcent, comparaisonSecteurs:comparaisonSecteurs.sort((a,b)=>(b.ecart||0)-(a.ecart||0)), comparaisonEquipes:[] };
+}
+
+
+// ── Historique par adresse ───────────────────────────────────────
+// Construit un index consultable : que ce foyer a-t-il donné les années passées ?
+async function chargerHistoriqueAdresses() {
+  const saisons = await lireToutesLesSaisons();
+  const index = {};
+  for (const s of saisons) {
+    if (!s.adresses) continue;
+    for (const [clef, d] of Object.entries(s.adresses)) {
+      if (!index[clef]) index[clef] = [];
+      index[clef].push({ annee: s.annee, adresse: d.a, statut: d.s, montant: d.m || 0, secteur: d.sc || null });
+    }
+  }
+  // Plus récent en premier
+  for (const clef in index) index[clef].sort((a, b) => b.annee - a.annee);
+  return index;
+}
+
+// Résumé court pour affichage : "2025 : 15 €" ou "2025 : refus"
+function resumeHistorique(entrees) {
+  if (!entrees || entrees.length === 0) return null;
+  return entrees.map(e => {
+    if (e.statut === "don")    return `${e.annee} : ${e.montant.toFixed(2).replace('.', ',')} €`;
+    if (e.statut === "offert") return `${e.annee} : offert`;
+    if (e.statut === "refuse") return `${e.annee} : refus`;
+    return `${e.annee} : absent`;
+  });
 }
 
 // gamification.js — Badges, paliers et classement ludique
@@ -3457,6 +3551,7 @@ const ROUTES = {
   "#relances":           renderRelances,
   "#historique":         renderHistorique,
   "#classement":         renderClassement,
+  "#statistiques":       renderStatistiques,
   "#journal":            renderJournal,
   "#config":             renderConfig,
   "#terrain":            renderTerrain,
@@ -3776,6 +3871,7 @@ function layoutAdmin(activeHash, content) {
     { hash: "#relances",  icon: "🔔", label: "Relances" },
     { hash: "#historique", icon: "📅", label: "Historique" },
     { hash: "#classement", icon: "🏆", label: "Classement" },
+    { hash: "#statistiques", icon: "📈", label: "Statistiques" },
     { hash: "#journal",    icon: "📜", label: "Journal" },
     { hash: "#config",    icon: "⚙️",  label: "Config" }
   ];
@@ -5399,6 +5495,228 @@ function showArchiverModal() {
 
 
 
+
+// ════════════════════════════════════════════════════════════
+//  STATISTIQUES FINES
+// ════════════════════════════════════════════════════════════
+
+async function renderStatistiques() {
+  if (APP.role !== "admin") { naviguer("#login"); return; }
+  stopUnsubs();
+
+  document.getElementById("main").innerHTML = layoutAdmin("#statistiques", `
+    <div class="page-header">
+      <h1>📈 Statistiques</h1>
+      <button id="btn-export-stats" class="btn btn--ghost">⬇️ Exporter</button>
+    </div>
+    <p style="font-size:.85rem;color:var(--ardoise-mid);margin-bottom:16px;line-height:1.5;">
+      Analyse de la tournée en cours. Ces chiffres servent à calibrer les objectifs et les horaires de sortie de l'an prochain.
+    </p>
+    <div id="stats-content"><div class="loader">Calcul en cours…</div></div>
+  `);
+  bindLogout();
+
+  let lignesSecteur = [];
+
+  try {
+    const [passages, secteurs] = await Promise.all([
+      fsGetAll(COLLECTIONS.PASSAGES),
+      lireSecteurs()
+    ]);
+    const el = document.getElementById("stats-content");
+
+    if (passages.length === 0) {
+      el.innerHTML = `<p class="empty-state">Aucun passage enregistré pour le moment.<br>
+        <small>Les statistiques apparaîtront dès les premières saisies.</small></p>`;
+      return;
+    }
+
+    const secteurMap = Object.fromEntries(secteurs.map(s => [s.id, s]));
+
+    // ── Par secteur ──
+    const parSecteur = {};
+    for (const s of secteurs) {
+      parSecteur[s.id] = {
+        nom: s.nom, commune: s.commune,
+        boites: nbFoyersSecteur(s),
+        dons: 0, offerts: 0, refus: 0, absents: 0, montant: 0
+      };
+    }
+    // Répartition horaire et par montant
+    const parHeure = {};
+    const parMontant = {};
+
+    for (const p of passages) {
+      const d = parSecteur[p.secteurId];
+      if (d) {
+        if (p.statut === "don")    { d.dons++;    d.montant += Number(p.montant || 0); }
+        if (p.statut === "offert")   d.offerts++;
+        if (p.statut === "refuse")   d.refus++;
+        if (p.statut === "absent" || p.statut === "relance") d.absents++;
+      }
+      // Créneau horaire
+      if (p.datePassage) {
+        const h = new Date(p.datePassage).getHours();
+        if (!parHeure[h]) parHeure[h] = { passages: 0, dons: 0, montant: 0 };
+        parHeure[h].passages++;
+        if (p.statut === "don") { parHeure[h].dons++; parHeure[h].montant += Number(p.montant || 0); }
+      }
+      // Montants les plus fréquents
+      if (p.statut === "don" && p.montant > 0) {
+        const m = Math.round(Number(p.montant));
+        parMontant[m] = (parMontant[m] || 0) + 1;
+      }
+    }
+
+    lignesSecteur = Object.values(parSecteur)
+      .filter(d => d.dons + d.offerts + d.refus + d.absents > 0)
+      .map(d => {
+        const visites = d.dons + d.offerts + d.refus;
+        const total = visites + d.absents;
+        const calendriers = d.dons + d.offerts;
+        return {
+          ...d, visites, total, calendriers,
+          tauxPlacement: d.boites > 0 ? (calendriers / d.boites) * 100 : null,
+          tauxRefus: visites > 0 ? (d.refus / visites) * 100 : 0,
+          tauxAbsence: total > 0 ? (d.absents / total) * 100 : 0,
+          donMoyen: d.dons > 0 ? d.montant / d.dons : 0,
+          avancement: d.boites > 0 ? (visites / d.boites) * 100 : null
+        };
+      })
+      .sort((a, b) => b.montant - a.montant);
+
+    // ── Chiffres globaux ──
+    const gDons = lignesSecteur.reduce((s, d) => s + d.dons, 0);
+    const gMontant = lignesSecteur.reduce((s, d) => s + d.montant, 0);
+    const gVisites = lignesSecteur.reduce((s, d) => s + d.visites, 0);
+    const gRefus = lignesSecteur.reduce((s, d) => s + d.refus, 0);
+    const donMoyenGlobal = gDons > 0 ? gMontant / gDons : 0;
+    const tauxRefusGlobal = gVisites > 0 ? (gRefus / gVisites) * 100 : 0;
+
+    // ── Créneaux horaires ──
+    const heures = Object.entries(parHeure)
+      .map(([h, d]) => ({
+        heure: Number(h), ...d,
+        taux: d.passages > 0 ? (d.dons / d.passages) * 100 : 0,
+        moyenne: d.dons > 0 ? d.montant / d.dons : 0
+      }))
+      .sort((a, b) => a.heure - b.heure);
+    const maxPassages = Math.max(1, ...heures.map(h => h.passages));
+
+    // ── Montants les plus donnés ──
+    const montants = Object.entries(parMontant)
+      .map(([m, n]) => ({ montant: Number(m), nb: n }))
+      .sort((a, b) => b.nb - a.nb).slice(0, 8);
+    const maxNb = Math.max(1, ...montants.map(m => m.nb));
+
+    const coulTaux = (t) => t >= 45 ? "#16A34A" : t >= 30 ? "#EAB308" : t >= 20 ? "#F97316" : "#EF4444";
+
+    el.innerHTML = `
+      <div class="stats-grid" style="margin-bottom:20px;">
+        <div class="stat-card stat-card--primary">
+          <div class="stat-value">${formatMontant(donMoyenGlobal)}</div>
+          <div class="stat-label">Don moyen</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${tauxRefusGlobal.toFixed(0)}%</div>
+          <div class="stat-label">Taux de refus</div>
+          <div class="stat-sub">${gRefus} refus sur ${gVisites} portes ouvertes</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${gDons}</div>
+          <div class="stat-label">Dons enregistrés</div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h2>Performance par secteur</h2>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Secteur</th><th>Avancement</th><th>Taux de placement</th>
+              <th>Don moyen</th><th>Refus</th><th>Absences</th><th>Collecté</th>
+            </tr></thead>
+            <tbody>
+              ${lignesSecteur.map(d => `
+                <tr>
+                  <td><strong>${d.nom}</strong>${d.commune !== d.nom ? `<br><small style="color:var(--ardoise-mid)">${d.commune}</small>` : ''}</td>
+                  <td>${d.avancement !== null ? `${d.avancement.toFixed(0)}%<br><small style="color:var(--ardoise-mid)">${d.visites}/${d.boites}</small>` : '—'}</td>
+                  <td>${d.tauxPlacement !== null
+                        ? `<strong style="color:${coulTaux(d.tauxPlacement)}">${d.tauxPlacement.toFixed(0)}%</strong><br><small style="color:var(--ardoise-mid)">${d.calendriers} cal.</small>`
+                        : `${d.calendriers} cal.`}</td>
+                  <td>${d.dons > 0 ? formatMontant(d.donMoyen) : '—'}</td>
+                  <td>${d.tauxRefus.toFixed(0)}%<br><small style="color:var(--ardoise-mid)">${d.refus}</small></td>
+                  <td>${d.tauxAbsence.toFixed(0)}%<br><small style="color:var(--ardoise-mid)">${d.absents}</small></td>
+                  <td><strong>${formatMontant(d.montant)}</strong></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:.76rem;color:var(--ardoise-mid);margin-top:8px;">
+          Le <strong>taux de placement</strong> rapporte les calendriers distribués au nombre total de boîtes du secteur.
+          C'est l'indicateur à utiliser pour fixer les objectifs de l'an prochain.
+        </p>
+      </div>
+
+      ${heures.length > 0 ? `
+      <div class="section-block">
+        <h2>Créneaux horaires</h2>
+        <div class="st-heures">
+          ${heures.map(h => `
+            <div class="st-heure">
+              <div class="st-h-barre-zone">
+                <div class="st-h-taux">${h.taux.toFixed(0)}%</div>
+                <div class="st-h-barre" style="height:${Math.round((h.passages/maxPassages)*100)}%;background:${coulTaux(h.taux)}"></div>
+              </div>
+              <div class="st-h-label">${h.heure}h</div>
+              <div class="st-h-nb">${h.passages}</div>
+            </div>`).join('')}
+        </div>
+        <p style="font-size:.76rem;color:var(--ardoise-mid);margin-top:8px;">
+          Hauteur = nombre de passages · Couleur et pourcentage = part de dons obtenus.
+          Les créneaux verts sont les plus productifs.
+        </p>
+      </div>` : ''}
+
+      ${montants.length > 0 ? `
+      <div class="section-block">
+        <h2>Montants les plus donnés</h2>
+        <div class="st-montants">
+          ${montants.map(m => `
+            <div class="st-montant">
+              <div class="st-m-val">${m.montant} €</div>
+              <div class="st-m-barre-zone">
+                <div class="st-m-barre" style="width:${Math.round((m.nb/maxNb)*100)}%"></div>
+              </div>
+              <div class="st-m-nb">${m.nb}×</div>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+    `;
+
+    document.getElementById("btn-export-stats")?.addEventListener("click", () => {
+      let csv = "Secteur;Commune;Boîtes;Visitées;Avancement (%);Calendriers;Taux placement (%);Dons;Don moyen (€);Refus;Taux refus (%);Absents;Taux absence (%);Collecté (€)\n";
+      for (const d of lignesSecteur) {
+        csv += `"${d.nom}";"${d.commune}";"${d.boites}";"${d.visites}";`
+             + `"${d.avancement !== null ? d.avancement.toFixed(1) : ''}";"${d.calendriers}";`
+             + `"${d.tauxPlacement !== null ? d.tauxPlacement.toFixed(1) : ''}";"${d.dons}";`
+             + `"${d.donMoyen.toFixed(2)}";"${d.refus}";"${d.tauxRefus.toFixed(1)}";`
+             + `"${d.absents}";"${d.tauxAbsence.toFixed(1)}";"${d.montant.toFixed(2)}"\n`;
+      }
+      csv += "\n\nCRÉNEAUX HORAIRES\nHeure;Passages;Dons;Taux de dons (%);Don moyen (€)\n";
+      for (const h of heures) {
+        csv += `"${h.heure}h";"${h.passages}";"${h.dons}";"${h.taux.toFixed(1)}";"${h.moyenne.toFixed(2)}"\n`;
+      }
+      telechargerCSV(csv, `statistiques-${new Date().toISOString().slice(0,10)}.csv`);
+      toast("Statistiques exportées", "success");
+    });
+
+  } catch(e) {
+    document.getElementById("stats-content").innerHTML =
+      `<p class="empty-state">Erreur : ${e.message}</p>`;
+  }
+}
+
 // ════════════════════════════════════════════════════════════
 //  JOURNAL DES MODIFICATIONS
 // ════════════════════════════════════════════════════════════
@@ -6290,6 +6608,13 @@ async function renderTerrainPassages() {
   });
 
   // Écoute temps réel
+  // Historique des années passées, chargé une seule fois par session
+  if (!APP._histAdresses) {
+    chargerHistoriqueAdresses()
+      .then(idx => { APP._histAdresses = idx; rafraichirModeRue(); })
+      .catch(() => { APP._histAdresses = {}; });
+  }
+
   // Écoute du secteur lui-même : compléments d'adresses ajoutés par un binôme
   APP._secteurCourant = secteur;
   const unsubSect = fsListenDoc(COLLECTIONS.SECTEURS, secteurId, (s) => {
@@ -6383,6 +6708,12 @@ window.corrigerPassage = async (passageId, secteurId) => {
     <div class="modal-inner">
       <h2>Corriger le passage</h2>
       <p class="login-hint">Saisi à ${heure} — ${p.adresse || 'adresse non précisée'}</p>
+      ${(() => {
+        const h = (APP._histAdresses || {})[normAdresse(p.adresse || '')];
+        const r = resumeHistorique(h);
+        if (!r || r.length === 0) return '';
+        return `<p class="mn-histo">📊 Années passées : ${r.slice(0, 3).join(' · ')}</p>`;
+      })()}
 
       <label class="label">Adresse</label>
       <input id="cp-adresse" class="input" value="${(p.adresse || '').replace(/"/g, '&quot;')}" placeholder="Adresse / numéro">
@@ -6967,10 +7298,12 @@ function majModeRue(secteur, passages) {
           const fus = trouverFusion(secteur, adrN);
           const nbFus = fus ? (fus.secondaires || []).length : 0;
           const nt = lireNoteAdresse(secteur, adrN);
+          const hist = (APP._histAdresses || {})[normAdr(adrN)];
+          const aDonne = hist && hist.some(x => x.statut === "don" && x.montant > 0);
           return `<button class="mr-num ${st ? 'mr-num--fait' : ''} ${aj ? 'mr-num--ajout' : ''} ${inh ? 'mr-num--inhab' : ''}"
             style="${inh ? '' : c ? `background:${c.bg};border-color:${c.bg};color:#fff` : ''}"
-            title="${inh ? 'Inhabitée' : c ? c.label : 'Non visité'}${aj ? ' — ajouté' : ''}${nbFus ? ` — regroupe ${nbFus+1} adresses` : ''}${nt ? ` — 📌 ${nt.texte}` : ''}"
-            onclick="saisirNumero('${n}','${rueActive.replace(/'/g,"\\'")}')">${n}${nbFus ? `<sup>+${nbFus}</sup>` : ''}${nt ? '<i class="mr-pin">📌</i>' : ''}</button>`;
+            title="${inh ? 'Inhabitée' : c ? c.label : 'Non visité'}${aj ? ' — ajouté' : ''}${nbFus ? ` — regroupe ${nbFus+1} adresses` : ''}${nt ? ` — 📌 ${nt.texte}` : ''}${aDonne ? ` — a donné ${hist[0].montant.toFixed(2)} € en ${hist[0].annee}` : ''}"
+            onclick="saisirNumero('${n}','${rueActive.replace(/'/g,"\\'")}')">${n}${nbFus ? `<sup>+${nbFus}</sup>` : ''}${nt ? '<i class="mr-pin">📌</i>' : ''}${aDonne ? '<i class="mr-don">€</i>' : ''}</button>`;
         }).join('')}
       </div>
     </div>`;
@@ -7110,6 +7443,12 @@ window.saisirNumero = async (numero, rue) => {
         <button class="mn-btn mn-btn--refuse" onclick="mnChoisir('refuse')">🚫 Refus</button>
         <button class="mn-btn mn-btn--absent" onclick="mnChoisir('absent')">🔔 Absent</button>
       </div>
+      ${(() => {
+        const h = (APP._histAdresses || {})[normAdresse(adresse)];
+        const r = resumeHistorique(h);
+        if (!r || r.length === 0) return '';
+        return `<p class="mn-histo">📊 Années passées : ${r.slice(0, 3).join(' · ')}</p>`;
+      })()}
       ${notePerm ? `<p class="mn-note-perm">📌 ${notePerm.texte}
         <button class="mn-lien" onclick="mnNote()">modifier</button></p>` : ''}
       <div class="mn-outils">
